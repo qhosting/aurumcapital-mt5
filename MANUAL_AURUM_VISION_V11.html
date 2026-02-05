@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manual Aurum Vision V11 [Ultimate]</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max_width: 800px;
+            margin: 0 auto;
+            padding: 40px;
+            background-color: #fff;
+        }
+
+        h1 {
+            color: #d4af37;
+            /* Gold color */
+            border-bottom: 2px solid #d4af37;
+            padding-bottom: 10px;
+        }
+
+        h2 {
+            color: #2c3e50;
+            margin-top: 30px;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 5px;
+        }
+
+        h3 {
+            color: #34495e;
+            margin-top: 25px;
+        }
+
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 20px 0;
+            font-size: 0.9em;
+        }
+
+        th,
+        td {
+            text-align: left;
+            padding: 12px;
+            border-bottom: 1px solid #ddd;
+        }
+
+        th {
+            background-color: #f8f9fa;
+            color: #2c3e50;
+        }
+
+        tr:hover {
+            background-color: #f5f5f5;
+        }
+
+        blockquote {
+            background: #f9f9f9;
+            border-left: 10px solid #d4af37;
+            margin: 1.5em 10px;
+            padding: 0.5em 10px;
+            font-style: italic;
+        }
+
+        .icon {
+            font-size: 1.2em;
+            margin-right: 5px;
+        }
+
+        .warning {
+            color: #e67e22;
+            font-weight: bold;
+        }
+
+        .success {
+            color: #27ae60;
+            font-weight: bold;
+        }
+
+        .danger {
+            color: #c0392b;
+            font-weight: bold;
+        }
+
+        @media print {
+            body {
+                padding: 0;
+            }
+
+            a {
+                text-decoration: none;
+                color: #000;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <h1>🦅 AURUM VISION V11: Manual de Operador Táctico (Sniper)</h1>
+    <p><strong>Versión del Sistema:</strong> V11 [Ultimate]<br>
+        <strong>Plataforma de Entrenamiento:</strong> TradingView<br>
+        <strong>Plataforma de Ejecución:</strong> MetaTrader 5 (Bot AurumSniper)
+    </p>
+
+    <hr>
+
+    <h2>🎓 Introducción: La Filosofía del Francotirador</h2>
+    <p>Bienvenido, futuro operador. Estás a punto de aprender a usar <strong>Aurum Vision</strong>, un sistema de
+        "Scalping de Precisión".</p>
+    <p>A diferencia de los traders novatos que "disparan a todo lo que se mueve", el operador Aurum es un
+        <strong>Francotirador</strong>:
+    </p>
+    <ol>
+        <li><strong>Paciencia Infinita:</strong> Esperamos horas para disparar en segundos.</li>
+        <li><strong>Disciplina Militar:</strong> Si falta 1 sola confirmación, NO se opera.</li>
+        <li><strong>Protección Primero:</strong> Antes de pensar en ganar, pensamos en no perder.</li>
+    </ol>
+
+    <h2>🧠 Conceptos Básicos (Pre-Requisitos)</h2>
+    <p>Antes de mirar el gráfico, debes entender las 5 fuerzas que mueven este sistema:</p>
+
+    <h3>1. La Corriente (Tendencia H1) 🌊</h3>
+    <p>Imagina un río. Si el río fluye hacia el sur, ¿nadarías hacia el norte? No.</p>
+    <ul>
+        <li><strong>Regla de Oro:</strong> Solo operamos a favor de la tendencia mayor (1 Hora).</li>
+        <li>Si H1 es <span class="success">ALCISTA</span>, solo buscamos COMPRAS.</li>
+        <li>Si H1 es <span class="danger">BAJISTA</span>, solo buscamos VENTAS.</li>
+    </ul>
+
+    <h3>2. El Muro (Zonas de Reacción) 🧱</h3>
+    <p>El precio tiene memoria. Donde rebotó antes, rebotará de nuevo.</p>
+    <ul>
+        <li><strong>Zona H1:</strong> Son techos y suelos fuertes.</li>
+        <li><strong>Zona Dinámica (Nueva V11):</strong> La línea de tendencia (EMA) también actúa como un muro.</li>
+        <li><strong>Regla:</strong> Compramos si el precio toca un soporte H1... <strong>O si regresa a tocar la EMA
+                (Pullback).</strong></li>
+        <li><em>Esto nos permite montarnos en tendencias fuertes aunque no estemos en máximos/mínimos.</em></li>
+    </ul>
+
+    <h3>3. El Resorte (RSI) 🌀</h3>
+    <p>El precio es como un resorte. Si lo estiras mucho hacia abajo, <strong>tiene</strong> que rebotar hacia arriba.
+    </p>
+    <ul>
+        <li><strong>Sobreventa (RSI < 30):</strong> El resorte está estirado al máximo hacia abajo. Probable rebote
+                    (Compra).</li>
+        <li><strong>Sobrecompra (RSI > 70):</strong> El resorte está estirado al máximo hacia arriba. Probable caída
+            (Venta).</li>
+        <li><em>(Nota: Versiones anteriores usaban 25/75, la V11 usa 30/70 para mayor sensibilidad).</em></li>
+    </ul>
+
+    <h3>4. La Fuerza (ADX) 🚀</h3>
+    <p><strong>Nuevo en V11.</strong> No basta con tener la dirección, necesitamos fuerza.</p>
+    <ul>
+        <li><strong>Condición:</strong> El ADX (Índice de Movimiento Direccional) debe ser mayor a <strong>20</strong>.
+        </li>
+        <li>Esto evita operar en mercados muertos o laterales sin volumen. Es un filtro interno del bot.</li>
+    </ul>
+
+    <h3>5. La Inercia (Anti-Spike) 🚄</h3>
+    <p>Imagina un tren a toda velocidad. Aunque veas una señal de "PARE", el tren no frena en seco.</p>
+    <ul>
+        <li><strong>Vela Elefante (Spike):</strong> Si ves una vela gigante (>3x el promedio), indica mucha fuerza
+            contraria.</li>
+        <li><strong>La Regla:</strong> No te pongas delante del tren. Espera a que termine esa vela. El bot bloqueará la
+            entrada si detecta esta "Inercia Peligrosa".</li>
+    </ul>
+
+    <h3>6. Lectura Visual del Gráfico (Iconos) 👁️</h3>
+    <p>El sistema te habla con símbolos:</p>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Símbolo</th>
+                <th>Significado</th>
+                <th>Acción</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><strong>Línea Azul/Roja</strong></td>
+                <td>Es la EMA de H1 (Tendencia).</td>
+                <td>Solo operar a favor de su color.</td>
+            </tr>
+            <tr>
+                <td><strong>Círculos Rojos/Verdes</strong></td>
+                <td>Son las Zonas H1 (Techos y Suelos).</td>
+                <td>Esperar a que el precio las toque.</td>
+            </tr>
+            <tr>
+                <td><span class="warning">⚠️ SPIKE!</span></td>
+                <td>¡Peligro! Vela gigante detectada.</td>
+                <td><strong>NO OPERAR</strong> (El Bot se bloquea aquí).</td>
+            </tr>
+            <tr>
+                <td>🔨 <strong>Martillo / 💫 Estrella</strong></td>
+                <td>Velas de rechazo.</td>
+                <td>Confirmación extra (Opcional).</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h3>7. Herramientas Visuales Avanzadas (Nuevas en V22) 🛠️</h3>
+    <p>El sistema ahora incluye ayudas visuales para la ejecución manual en TradingView:</p>
+    <ul>
+        <li><strong>Detector de Trampas (🪤):</strong> Identifica "Fakeouts". Si el precio rompe una zona pero cierra
+            dentro, aparece esta etiqueta. Es una señal de reversión muy fuerte.</li>
+        <li><strong>Visualizador de Setup:</strong> Cuando aparece una señal (Triángulo), el sistema dibuja
+            automáticamente:
+            <ul>
+                <li>Línea <strong>Roja</strong>: Stop Loss sugerido (ATR).</li>
+                <li>Línea <strong>Verde</strong>: Take Profit sugerido.</li>
+                <li><em>Uso:</em> Solo copia estos precios a tu MetaTrader.</li>
+            </ul>
+        </li>
+    </ul>
+
+    <h2>🖥️ Conociendo tu Herramienta: El Dashboard</h2>
+    <p>En la esquina superior derecha de tu TradingView verás el panel de control. Así se lee:</p>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Indicador</th>
+                <th>Qué Dice</th>
+                <th>Interpretación</th>
+                <th>Acción</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><strong>RSI (M1)</strong></td>
+                <td><code>22.50</code> (Verde)</td>
+                <td>Precio "Barato" (< 30)</td>
+                <td>✅ Listo para Comprar</td>
+            </tr>
+            <tr>
+                <td><strong>Trend H1</strong></td>
+                <td><code>ALCISTA</code> (Verde)</td>
+                <td>La tendencia mayor sube</td>
+                <td>✅ Solo Compras</td>
+            </tr>
+            <tr>
+                <td><strong>Anti-Spike</strong></td>
+                <td><code>⚠️ RECHAZADO</code></td>
+                <td>Vela anterior fue explosiva</td>
+                <td>🛑 <strong>ESPERAR</strong> (Peligro)</td>
+            </tr>
+            <tr>
+                <td><strong>Zona H1</strong></td>
+                <td><code>ZONA COMPRA</code></td>
+                <td>Estamos en un soporte fuerte</td>
+                <td>✅ Confirmado</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <p><strong>TU MISIÓN:</strong> Esperar a que <strong>TODO</strong> esté en Verde. Si hay un solo Rojo o Naranja,
+        anulas la operación.</p>
+
+    <h2>🎯 La Estrategia: Paso a Paso (Checklist)</h2>
+
+    <h3>Escenario: Buscando una COMPRA (Long) 🟢</h3>
+    <ol>
+        <li><strong>Observación Macro:</strong> Mira el Dashboard. ¿Dice <strong>Trend H1: ALCISTA</strong>?
+            <ul>
+                <li><em>Si NO:</em> Aborta. No operamos contra tendencia.</li>
+            </ul>
+        </li>
+        <li><strong>Ubicación:</strong> ¿El precio bajó y tocó una <strong>ZONA DE COMPRA</strong> (Línea o área
+            marcada)?
+            <ul>
+                <li><em>Si NO:</em> Paciencia. Deja que llegue al precio.</li>
+            </ul>
+        </li>
+        <li><strong>El Gatillo (RSI):</strong> ¿El RSI bajó por debajo de <strong>30</strong>?
+            <ul>
+                <li>Esto indica que los vendedores están agotados.</li>
+            </ul>
+        </li>
+        <li><strong>⛔ EL FILTRO DE SEGURIDAD (Vital):</strong>
+            <ul>
+                <li>Mira la última vela que cerró. ¿Fue una vela roja GIGANTE?</li>
+                <li>Si el Dashboard dice <strong>"⚠️ RECHAZADO"</strong>, ¡QUIETO!</li>
+                <li>Espera a que cierre una vela "normal" o pequeña.</li>
+                <li>Cuando el Dashboard diga <strong>"✅ SEGURO"</strong>, disparas.</li>
+            </ul>
+        </li>
+    </ol>
+
+    <h2>🛡️ Gestión de Riesgo y Seguridad (Aurum Shield)</h2>
+    <p>El sistema V11 Ultimate incluye protecciones automáticas en el Bot (AurumSniper):</p>
+
+    <h3>1. En la Operación Individual</h3>
+    <ul>
+        <li><strong>Stop Loss (SL):</strong> Automático a <strong>1.5 veces el ATR</strong> (Volatilidad). Nunca se
+            mueve en contra.</li>
+        <li><strong>Cierre Parcial (BreakEven):</strong>
+            <ul>
+                <li>Cuando ganas <strong>10 Pips (100 puntos)</strong> o un ratio aprox 1:1...</li>
+                <li>El Bot cierra el <strong>50% del lote</strong> (Dinero al bolsillo).</li>
+                <li>Mueve el Stop Loss al precio de entrada (Riesgo Cero).</li>
+                <li><em>Resultado:</em> "Free Trade". Dejas correr el resto.</li>
+            </ul>
+        </li>
+    </ul>
+
+    <h3>2. Seguridad de la Cuenta (Daily Guard)</h3>
+    <p>El bot tiene un "Cinturón de Seguridad" diario:</p>
+    <ul>
+        <li><strong>Max Drawdown Diario:</strong> Si pierdes el <strong>3%</strong> de tu cuenta en un día, el bot se
+            apaga hasta mañana.</li>
+        <li><strong>Max Operaciones:</strong> Límite de <strong>3 Trades</strong> al día (Configurable). Evita el
+            sobre-operar (Overtrading).</li>
+    </ul>
+
+    <h2>⚠️ Errores Comunes de Novatos</h2>
+    <ul>
+        <li><strong>"El Rebote en V" y la Ansiedad:</strong>
+            <ul>
+                <li>Querer entrar justo en la punta de abajo mientras el precio cae a plomo, pero hay riesgo de Spike.
+                </li>
+            </ul>
+        </li>
+        <li><strong>Ignorar la Tendencia H1:</strong>
+            <ul>
+                <li>Vender porque el RSI está alto, pero la tendencia H1 es super alcista. Te atropellarán.</li>
+            </ul>
+        </li>
+        <li><strong>Operar en Noticias:</strong>
+            <ul>
+                <li>Si hay noticias (High Impact), apaga todo.</li>
+            </ul>
+        </li>
+    </ul>
+
+    <h2>📝 Ejercicio Práctico</h2>
+    <ol>
+        <li>Abre TradingView con <strong>Aurum Vision V11</strong>.</li>
+        <li>Busca 5 señales de "Sniper Buy" (Triángulo Verde).</li>
+        <li>Verifica: ¿Estaba el RSI < 30? ¿Había Zona H1? ¿Estaba el ADX confirmando?</li>
+        <li>Simula la salida: ¿Hubiera tocado el BreakEven (10 pips)?</li>
+    </ol>
+
+    <blockquote>
+        "El mercado es un mecanismo para transferir dinero del impaciente al paciente." - Warren Buffett.
+    </blockquote>
+
+    <p style="text-align: center; margin-top: 50px; font-size: 0.8em; color: #7f8c8d;">
+        Aurum Capital - Academia de Trading 2026
+    </p>
+
+</body>
+
+</html>

@@ -1,356 +1,323 @@
 //+------------------------------------------------------------------+
-//|                                            AurumSniper_V9.mq5   |
-//|                                  Copyright 2025, Aurum Capital  |
+//|                                           AurumSniper_V11.mq5   |
+//|                    Copyright 2026, Aurum Capital                 |
+//|           FUSION: V9 Sniper Logic + V1.05 Capital Management     |
 //+------------------------------------------------------------------+
 #property copyright "Aurum Capital"
-#property version   "9.00" // V9 Price Action Filter Edition
+#property version   "11.00"
 #property strict
+
 #include <Trade\Trade.mqh>
 
-//--- INPUTS
-input group "Configuracion General"
-input bool   InpEnableAutoTrade = true;
-input bool   InpGuardianManual  = true;
+// ==================== INPUTS ====================
+input group "=== GESTION DE RIESGO AVANZADA (V1.05) ==="
+input double   InpLotSize       = 0.02;     // Lote Base
+input double   InpMaxDailyLoss  = 3.0;      // % Max Perdida Diaria Shield
+input bool     InpAutoDailyReset= true;     // Resetear contador cada dia
 
-input group "Estrategia M5 (Smart Filter)"
-input int    InpDistanciaPuntos = 50;
-input int    InpADXThreshold    = 20;
-input int    InpEMAPeriod   = 200;
-input int    InpRSIPeriod   = 14;
-input double InpRSIOverbought = 75.0;
-input double InpRSIOversold   = 25.0;
+input group "=== ESTRATEGIA SNIPER (V9 Engine) ==="
+input int      InpMaxSpread     = 25;       // Spread maximo (M1 Scalping)
+input int      InpDistanciaPuntos = 100;    // Distancia a Zona H1 (Ampliada)
+input int      InpEMAPeriod     = 200;      // Tendencia H1
+input int      InpRSIOverbought = 70;       // Venta (Mas sensible)
+input int      InpRSIOversold   = 30;       // Compra (Mas sensible)
+input int      InpADXThreshold  = 20;       // Volatilidad Minima
 
-input group "Riesgo (Wide Stops)"
-input double InpLotSize     = 0.01;
-input int    InpATRPeriod   = 14;
-input double InpSL_Multiplier = 2.0;
-input double InpRiskReward    = 1.5;
+input group "=== GESTION DE SALIDA PRO ==="
+input bool     InpUsePartials   = true;     // Cerrar 50% al 1:1
+input int      InpRiskReward    = 2;        // Ratio riesgo/beneficio
+input int      InpBE_Trigger    = 100;      // Puntos para BreakEven
+input int      InpMaxDailyTrades= 3;        // Max Operaciones Diarias
 
-input group "Gestion (Profit Locker)"
-input int    InpBE_Trigger    = 80;
-input int    InpBE_Offset     = 10;
-input int    InpTrail_Dist    = 150;
-input int    InpTrail_Step    = 50;
-
-input group "News Guard"
-input bool   InpUseNewsFilter = true;
-input int    InpMinsBefore    = 60;
-input int    InpMinsAfter     = 30;
-
-//--- CONSTANTES
-const string WEBHOOK_URL = "https://n8n.qhosting.net/webhook/aurum-trading-alerts";
-const int    MAGIC_NUMBER = 9999;
-
-//--- GLOBALES
+// ==================== GLOBALES ====================
 CTrade trade;
-int hMA, hRSI, hATR, hADX;
-datetime last_alert_time = 0;
+int hMA, hRSI, hADX, hATR;
+double g_start_balance = 0;
+datetime g_last_reset_day = 0;
+int g_daily_trades = 0; // Contador de trades hoy
+const int MAGIC_NUMBER = 777999;
 
 //+------------------------------------------------------------------+
-//| Expert initialization function                                   |
+//| Initialization                                                   |
 //+------------------------------------------------------------------+
-int OnInit()
-  {
+int OnInit() {
    trade.SetExpertMagicNumber(MAGIC_NUMBER);
+   
+   // Inicializar Gestión de Saldo (V1.05)
+   g_start_balance = AccountInfoDouble(ACCOUNT_BALANCE);
+   g_last_reset_day = iTime(_Symbol, PERIOD_D1, 0);
 
-   hMA = iMA(_Symbol, PERIOD_M15, InpEMAPeriod, 0, MODE_EMA, PRICE_CLOSE);
-   hRSI = iRSI(_Symbol, PERIOD_M5, InpRSIPeriod, PRICE_CLOSE);
-   hATR = iATR(_Symbol, PERIOD_M5, InpATRPeriod);
-   hADX = iADX(_Symbol, PERIOD_M15, 14);
-
-   if(hMA == INVALID_HANDLE || hRSI == INVALID_HANDLE || hATR == INVALID_HANDLE || hADX == INVALID_HANDLE)
-     {
-      Print("Error creating indicators");
-      return(INIT_FAILED);
-     }
-
+   // Inicializar Indicadores Sniper (V9 - H1 Tendencia)
+   hMA  = iMA(_Symbol, PERIOD_H1, InpEMAPeriod, 0, MODE_EMA, PRICE_CLOSE);
+   hRSI = iRSI(_Symbol, _Period, 14, PRICE_CLOSE);
+   hADX = iADX(_Symbol, _Period, 14);
+   hATR = iATR(_Symbol, _Period, 14); // Volatilidad para SL Dinamico
+   
+   if(hMA==INVALID_HANDLE || hRSI==INVALID_HANDLE || hADX==INVALID_HANDLE) return(INIT_FAILED);
+   
+   EventSetTimer(1); // Dashboard Timer
+   Print("🦅 AURUM V11 ULTIMATE: Sniper Engine + Equity Guard Loaded.");
    return(INIT_SUCCEEDED);
-  }
+}
+
+void OnDeinit(const int reason) {
+   IndicatorRelease(hMA); IndicatorRelease(hRSI); IndicatorRelease(hADX);
+   EventKillTimer();
+   ObjectsDeleteAll(0, "lbl_");
+}
 
 //+------------------------------------------------------------------+
-//| Expert deinitialization function                                 |
+//| Main Engine                                                      |
 //+------------------------------------------------------------------+
-void OnDeinit(const int reason)
-  {
-   IndicatorRelease(hMA);
-   IndicatorRelease(hRSI);
-   IndicatorRelease(hATR);
-   IndicatorRelease(hADX);
-  }
+void OnTick() {
+   // 1. Modulo de Gestion de Cuenta (V1.05)
+   CheckAndResetDaily();
+   if(CheckDailyDrawdown()) {
+      Comment("\n⛔ MAX DRAWDOWN DIARIO ALCANZADO. TRADING DETENIDO.");
+      return; 
+   } else {
+      Comment(""); // Limpiar mensaje si estamos operativos
+   }
+   
+   // 2. Gestion de Posiciones (Cierres Parciales V1.05)
+   GestionarPosicionesPro();
+   
+   if(IsPositionOpenOnSymbol()) return; // Solo esperar si ESTE simbolo tiene trade activo
+   if(!CheckSpread()) return;
+   
+   // 3. Logica de Entrada Sniper (V9)
+   if(!IsNewBar()) return;
+   
+   // Check Max Trades Diarios
+   if(g_daily_trades >= InpMaxDailyTrades) {
+       Comment("\n😴 META DIARIA ALCANZADA (" + IntegerToString(g_daily_trades) + "/" + IntegerToString(InpMaxDailyTrades) + "). HASTA MAÑANA.");
+       return;
+   }
+   
+   // --- FILTRO ANTI-TREN (NUEVO) ---
+   // Si la vela anterior fue explosiva (3x el promedio), NO operar reversión
+   if(IsMomentumSpike()) {
+       Print("⚠️ ALERTA: Vela 'Elefante' detectada. Operación cancelada por inercia fuerte.");
+       return;
+   }
+   
+   double ma_h1 = GetBufferVal(hMA, 0);
+   double rsi   = GetBufferVal(hRSI, 1); // Vela cerrada
+   double adx   = GetBufferVal(hADX, 1);
+   double close = iClose(_Symbol, _Period, 1);
+   double current_price = iClose(_Symbol, _Period, 0);
 
-//+------------------------------------------------------------------+
-//| Helper: Check for Candle Pattern and Return Name                |
-//+------------------------------------------------------------------+
-string GetPatternName(string type, int shift)
-  {
-   double open  = iOpen(_Symbol, PERIOD_M5, shift);
-   double close = iClose(_Symbol, PERIOD_M5, shift);
-   double high  = iHigh(_Symbol, PERIOD_M5, shift);
-   double low   = iLow(_Symbol, PERIOD_M5, shift);
-
-   double body  = MathAbs(close - open);
-   double range = high - low;
-   if(range == 0) return "";
-
-   double upper_wick = high - MathMax(open, close);
-   double lower_wick = MathMin(open, close) - low;
-
-   // --- BUY PATTERNS ---
-   if(type == "BUY")
-     {
-      // 1. Hammer: Lower wick >= 2x Body. Body in upper 30%.
-      if((lower_wick >= 2 * body) && (MathMin(open, close) >= low + (0.7 * range)))
-         return "Hammer";
-
-      // 2. Bullish Engulfing
-      double prev_open  = iOpen(_Symbol, PERIOD_M5, shift + 1);
-      double prev_close = iClose(_Symbol, PERIOD_M5, shift + 1);
-
-      if((prev_close < prev_open) && (close > open) &&
-         (close > prev_open) && (open < prev_close))
-         return "Bullish Engulfing";
-     }
-
-   // --- SELL PATTERNS ---
-   if(type == "SELL")
-     {
-      // 1. Shooting Star: Upper wick >= 2x Body. Body in lower 30%.
-      if((upper_wick >= 2 * body) && (MathMax(open, close) <= low + (0.3 * range)))
-         return "Shooting Star";
-
-      // 2. Bearish Engulfing
-      double prev_open  = iOpen(_Symbol, PERIOD_M5, shift + 1);
-      double prev_close = iClose(_Symbol, PERIOD_M5, shift + 1);
-
-      if((prev_close > prev_open) && (close < open) &&
-         (close < prev_open) && (open > prev_close))
-         return "Bearish Engulfing";
-     }
-
-   return "";
-  }
-
-//+------------------------------------------------------------------+
-//| Helper: News Guard (HayNoticia)                                  |
-//+------------------------------------------------------------------+
-bool HayNoticia()
-  {
-   if(!InpUseNewsFilter) return false;
-
-   MqlCalendarValue values[];
-   datetime start = TimeCurrent() - (InpMinsBefore * 60);
-   datetime end   = TimeCurrent() + (InpMinsAfter * 60);
-
-   string base = StringSubstr(_Symbol, 0, 3);
-   string quote = StringSubstr(_Symbol, 3, 3);
-
-   if(CalendarValueHistory(values, start, end, NULL, NULL))
-     {
-      for(int i=0; i<ArraySize(values); i++)
-        {
-         long event_id = values[i].event_id;
-         MqlCalendarEvent event;
-         if(CalendarEventById(event_id, event))
-           {
-             if(event.importance >= 3) // High Impact
-               {
-                if(event.currency == base || event.currency == quote)
-                  {
-                   return true;
-                  }
-               }
-           }
-        }
-     }
-   return false;
-  }
-
-//+------------------------------------------------------------------+
-//| Helper: Profit Locker (GestionarPosiciones)                      |
-//+------------------------------------------------------------------+
-void GestionarPosiciones()
-  {
-   for(int i=PositionsTotal()-1; i>=0; i--)
-     {
-      ulong ticket = PositionGetTicket(i);
-      if(PositionSelectByTicket(ticket))
-        {
-         if(InpGuardianManual && PositionGetInteger(POSITION_MAGIC) == 0) continue;
-         if(PositionGetInteger(POSITION_MAGIC) != MAGIC_NUMBER && PositionGetInteger(POSITION_MAGIC) != 0) continue;
-
-         double sl = PositionGetDouble(POSITION_SL);
-         double tp = PositionGetDouble(POSITION_TP);
-         double price = PositionGetDouble(POSITION_PRICE_CURRENT);
-         double open_price = PositionGetDouble(POSITION_PRICE_OPEN);
-         long type = PositionGetInteger(POSITION_TYPE);
-         double point = SymbolInfoDouble(_Symbol, SYMBOL_POINT);
-
-         double profit_points = 0;
-
-         if(type == POSITION_TYPE_BUY)
-           {
-            profit_points = (price - open_price) / point;
-
-            if(profit_points >= InpBE_Trigger && (sl < open_price + InpBE_Offset * point))
-              {
-               trade.PositionModify(ticket, open_price + InpBE_Offset * point, tp);
-              }
-
-            if(profit_points >= InpTrail_Dist)
-              {
-               double new_sl = price - InpTrail_Step * point;
-               if(new_sl > sl)
-                 {
-                  trade.PositionModify(ticket, new_sl, tp);
-                 }
-              }
-           }
-         else if(type == POSITION_TYPE_SELL)
-           {
-            profit_points = (open_price - price) / point;
-
-            if(profit_points >= InpBE_Trigger && (sl == 0 || sl > open_price - InpBE_Offset * point))
-              {
-               trade.PositionModify(ticket, open_price - InpBE_Offset * point, tp);
-              }
-
-            if(profit_points >= InpTrail_Dist)
-              {
-               double new_sl = price + InpTrail_Step * point;
-               if(sl == 0 || new_sl < sl)
-                 {
-                  trade.PositionModify(ticket, new_sl, tp);
-                 }
-              }
-           }
-        }
-     }
-  }
-
-//+------------------------------------------------------------------+
-//| Helper: Connectivity (EnviarWebhook)                             |
-//+------------------------------------------------------------------+
-void EnviarWebhook(string signal, string razon, double price)
-  {
-   string headers = "Content-Type: application/json\r\n";
-   char data[];
-   char result[];
-   string result_headers;
-
-   string json = StringFormat("{\"symbol\":\"%s\", \"signal\":\"%s\", \"reason\":\"%s\", \"price\":%.5f, \"time\":\"%s\"}",
-                              _Symbol, signal, razon, price, TimeToString(TimeCurrent()));
-
-   StringToCharArray(json, data, 0, WHOLE_ARRAY, CP_UTF8);
-
-   WebRequest("POST", WEBHOOK_URL, headers, 5000, data, result, result_headers);
-  }
-
-//+------------------------------------------------------------------+
-//| Helper: Zone Detection (H1 High/Low)                             |
-//+------------------------------------------------------------------+
-bool IsInZone(string type)
-  {
-   double h1_high = iHigh(_Symbol, PERIOD_H1, iHighest(_Symbol, PERIOD_H1, MODE_HIGH, 20, 1));
-   double h1_low  = iLow(_Symbol, PERIOD_H1, iLowest(_Symbol, PERIOD_H1, MODE_LOW, 20, 1));
-
+   bool trend_bull = (current_price > ma_h1); 
+   bool trend_bear = (current_price < ma_h1);
+   bool in_zone_buy = IsInZone("BUY", ma_h1);
+   bool in_zone_sell= IsInZone("SELL", ma_h1);
+   
+   double atr = GetBufferVal(hATR, 1);
    double ask = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
    double bid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
-   double point = SymbolInfoDouble(_Symbol, SYMBOL_POINT);
-   double dist = InpDistanciaPuntos * point;
 
-   if(type == "BUY")
-     {
-      if(MathAbs(ask - h1_low) <= dist) return true;
-     }
-   else if(type == "SELL")
-     {
-      if(MathAbs(bid - h1_high) <= dist) return true;
-     }
+   // COMPRA: Tendencia Alcista + Zona H1 + RSI Sobreventado + ADX
+   if(trend_bull && in_zone_buy && rsi < InpRSIOversold && adx > InpADXThreshold) {
+       double sl_dist = atr * 1.5; // SL dinamico por volatilidad
+       double tp_dist = sl_dist * InpRiskReward;
+       
+       double sl = NormalizeDouble(ask - sl_dist, _Digits);
+       double tp = NormalizeDouble(ask + tp_dist, _Digits);
+       
+       // Validar distancia minima del broker
+       CheckStops(sl, tp, true); 
+       
+       if(trade.Buy(InpLotSize, _Symbol, ask, sl, tp, "Aurum V11 Sniper")) {
+           g_daily_trades++; // Sumar contador
+       }
+   }
 
+   // VENTA: Tendencia Bajista + Zona H1 + RSI Sobrecomprado + ADX
+   if(trend_bear && in_zone_sell && rsi > InpRSIOverbought && adx > InpADXThreshold) {
+       double sl_dist = atr * 1.5;
+       double tp_dist = sl_dist * InpRiskReward;
+       
+       double sl = NormalizeDouble(bid + sl_dist, _Digits);
+       double tp = NormalizeDouble(bid - tp_dist, _Digits);
+       
+       CheckStops(sl, tp, false);
+       
+       if(trade.Sell(InpLotSize, _Symbol, bid, sl, tp, "Aurum V11 Sniper")) {
+           g_daily_trades++; // Sumar contador
+       }
+   }
+}
+
+void OnTimer() {
+   UpdateDashboard();
+}
+
+//+------------------------------------------------------------------+
+//| HELPERS: LOGICA V1.05 + VISUALES                                 |
+//+------------------------------------------------------------------+
+
+// Modulo de Soportes V9 + V11 (Dinámico: Zona Fija + EMA Pullback)
+bool IsInZone(string type, double ma_ref) {
+   double h1_high = iHigh(_Symbol, PERIOD_H1, iHighest(_Symbol, PERIOD_H1, MODE_HIGH, 20, 1));
+   double h1_low  = iLow(_Symbol, PERIOD_H1, iLowest(_Symbol, PERIOD_H1, MODE_LOW, 20, 1));
+   double dist = InpDistanciaPuntos * _Point;
+   
+   double price = (type == "BUY") ? SymbolInfoDouble(_Symbol, SYMBOL_ASK) : SymbolInfoDouble(_Symbol, SYMBOL_BID);
+
+   if(type == "BUY") {
+       bool near_floor = MathAbs(price - h1_low) <= dist;
+       bool near_ema   = MathAbs(price - ma_ref) <= dist; // Pullback a la media
+       return (near_floor || near_ema);
+   }
+   if(type == "SELL") {
+       bool near_ceil = MathAbs(price - h1_high) <= dist;
+       bool near_ema  = MathAbs(price - ma_ref) <= dist; // Pullback a la media
+       return (near_ceil || near_ema);
+   }
    return false;
-  }
+}
 
-//+------------------------------------------------------------------+
-//| Expert tick function                                             |
-//+------------------------------------------------------------------+
-void OnTick()
-  {
-   GestionarPosiciones();
+// Modulo Gestion Avanzada V1.05 (Adaptado)
+void GestionarPosicionesPro() {
+   for(int i=PositionsTotal()-1; i>=0; i--) {
+      ulong ticket = PositionGetTicket(i);
+      if(!PositionSelectByTicket(ticket)) continue;
+      if(PositionGetInteger(POSITION_MAGIC) != MAGIC_NUMBER) continue;
 
-   if(!InpEnableAutoTrade) return;
-   if(HayNoticia()) return;
+      double entry = PositionGetDouble(POSITION_PRICE_OPEN);
+      double sl    = PositionGetDouble(POSITION_SL);
+      double tp    = PositionGetDouble(POSITION_TP);
+      double vol   = PositionGetDouble(POSITION_VOLUME);
+      long type    = PositionGetInteger(POSITION_TYPE);
+      double cur_price = PositionGetDouble(POSITION_PRICE_CURRENT);
+      
+      double profit_puntos = MathAbs(cur_price - entry) / _Point;
+      
+      // 1. Cierre Parcial al 1:1 (Protege ganancias rápido)
+      if(InpUsePartials && vol >= 0.02 && profit_puntos >= InpBE_Trigger) {
+          // Si el SL aun está en riesgo (no breakeven), ejecutamos parcial
+          bool is_risky = (type==POSITION_TYPE_BUY) ? (sl < entry) : (sl > entry);
+          if(is_risky) {
+             trade.PositionClosePartial(ticket, vol/2.0); // Cierra mitad
+             double new_sl = entry; // Mueve SL a Entrada (BreakEven estricto)
+             trade.PositionModify(ticket, new_sl, tp);
+             Print("🛡️ SHIELD ACTIVADO: Parcial Cerrado + BreakEven.");
+          }
+      }
+   }
+}
 
-   if(PositionsTotal() > 0) return;
+// Modulo Seguridad V1.05
+void CheckAndResetDaily() {
+   // Inicializacion de Seguridad (Si el bot arranca con 0)
+   if(g_start_balance <= 0) {
+      g_start_balance = AccountInfoDouble(ACCOUNT_BALANCE);
+      g_last_reset_day = iTime(_Symbol, PERIOD_D1, 0);
+      return;
+   }
 
-   double rsi[], adx[], ma[];
-   ArraySetAsSeries(rsi, true);
-   ArraySetAsSeries(adx, true);
-   ArraySetAsSeries(ma, true);
+   if(!InpAutoDailyReset) return;
+   
+   if(iTime(_Symbol, PERIOD_D1, 0) > g_last_reset_day) {
+      g_start_balance = AccountInfoDouble(ACCOUNT_BALANCE);
+      g_last_reset_day = iTime(_Symbol, PERIOD_D1, 0);
+      g_daily_trades = 0; // Resetear contador de trades
+      Print("🔄 NUEVO DIA: Balance y Trades Reseteados.");
+   }
+}
 
-   CopyBuffer(hRSI, 0, 0, 2, rsi);
-   CopyBuffer(hADX, 0, 0, 2, adx);
-   CopyBuffer(hMA, 0, 0, 2, ma);
+bool CheckDailyDrawdown() {
+   double equity = AccountInfoDouble(ACCOUNT_EQUITY);
+   double drop = g_start_balance - equity;
+   return (drop >= g_start_balance * (InpMaxDailyLoss/100.0));
+}
 
-   double current_rsi = rsi[0];
-   double current_adx = adx[0];
-   double current_ma  = ma[0];
-   double close_m15   = iClose(_Symbol, PERIOD_M15, 0);
+bool CheckSpread() {
+   return (SymbolInfoInteger(_Symbol, SYMBOL_SPREAD) <= InpMaxSpread);
+}
 
-   bool trend_bullish = close_m15 > current_ma;
-   bool trend_bearish = close_m15 < current_ma;
+bool IsNewBar() {
+   static datetime last_bar;
+   if(last_bar == iTime(_Symbol, _Period, 0)) return false;
+   last_bar = iTime(_Symbol, _Period, 0);
+   return true;
+}
 
-   // Pattern Check (Shift 1 Priority, then Shift 0)
-   string pat_buy_name = GetPatternName("BUY", 1);
-   if(pat_buy_name == "") pat_buy_name = GetPatternName("BUY", 0);
+// Filtro de Inercia (Evita operar contra velas gigantes - Memoria 3 Velas)
+bool IsMomentumSpike() {
+   double body_avg = 0;
+   for(int i=4; i<=13; i++) { // Promedio de 10 velas anteriores al grupo reciente
+      body_avg += MathAbs(iClose(_Symbol,_Period,i) - iOpen(_Symbol,_Period,i));
+   }
+   body_avg /= 10.0;
+   
+   // Chequear solo la ULTIMA vela cerrada (Agilidad Sniper)
+   // Si la vela 1 fue explosiva, esperamos 1 minuto. Si la vela 1 es normal, entramos.
+   for(int k=1; k<=1; k++) {
+      double candle_body = MathAbs(iClose(_Symbol,_Period,k) - iOpen(_Symbol,_Period,k));
+      if (candle_body > body_avg * 3.0) return true; 
+   }
+   
+   return false;
+}
 
-   string pat_sell_name = GetPatternName("SELL", 1);
-   if(pat_sell_name == "") pat_sell_name = GetPatternName("SELL", 0);
+double GetBufferVal(int h, int idx) {
+   double b[]; 
+   ArraySetAsSeries(b, true);
+   if(CopyBuffer(h, 0, idx, 1, b)>0) return b[0]; 
+   return 0; 
+}
 
-   // --- BUY LOGIC ---
-   if(trend_bullish && IsInZone("BUY"))
-     {
-      if(current_rsi < InpRSIOversold)
-        {
-         if(current_adx > InpADXThreshold)
-           {
-            if(pat_buy_name != "")
-              {
-               double atr_val = 0;
-               double atr_buf[]; ArraySetAsSeries(atr_buf, true);
-               CopyBuffer(hATR, 0, 0, 1, atr_buf);
-               atr_val = atr_buf[0];
+// Validar Stops Minimos del Broker
+void CheckStops(double &sl, double &tp, bool isBuy) {
+   double min_dist = (double)SymbolInfoInteger(_Symbol, SYMBOL_TRADE_STOPS_LEVEL) * _Point;
+   double price = isBuy ? SymbolInfoDouble(_Symbol, SYMBOL_ASK) : SymbolInfoDouble(_Symbol, SYMBOL_BID);
+   
+   // Si el SL esta muy pegado (< StopsLevel), ajustarlo
+   if(MathAbs(price - sl) < min_dist) {
+       sl = isBuy ? price - min_dist -_Point : price + min_dist + _Point;
+   }
+}
 
-               double sl = SymbolInfoDouble(_Symbol, SYMBOL_ASK) - (atr_val * InpSL_Multiplier);
-               double tp = SymbolInfoDouble(_Symbol, SYMBOL_ASK) + (atr_val * InpSL_Multiplier * InpRiskReward);
+// GUI Visual
+void UpdateDashboard() {
+   double ma = GetBufferVal(hMA, 0);
+   double price = iClose(_Symbol, _Period, 0);
+   string trend_txt = (price > ma) ? "ALCISTA (Busca BUY)" : "BAJISTA (Busca SELL)";
+   color trend_clr = (price > ma) ? clrLime : clrRed;
+   
+   DrawLabel("lbl_Title", "🦅 AURUM SNIPER V11 (ULTIMATE)", 20, 20, clrGold, 12);
+   DrawLabel("lbl_Trend", "Tendencia H1: " + trend_txt, 20, 45, trend_clr, 10);
+   
+   string dd_txt = StringFormat("Drawdown Diario: %.2f %% / Max %.1f %%", 
+      (g_start_balance - AccountInfoDouble(ACCOUNT_EQUITY))/g_start_balance*100, InpMaxDailyLoss);
+   DrawLabel("lbl_Risk", dd_txt, 20, 65, clrWhite, 10);
+   DrawLabel("lbl_RSI", "RSI: " + DoubleToString(GetBufferVal(hRSI,0), 2), 20, 85, clrWhite, 10);
+   
+   ChartRedraw();
+}
 
-               trade.Buy(InpLotSize, _Symbol, 0, sl, tp, "AurumSniper V9");
-               EnviarWebhook("BUY", "V9: " + pat_buy_name + " + RSI", SymbolInfoDouble(_Symbol, SYMBOL_ASK));
-              }
-           }
-        }
-     }
+void DrawLabel(string name, string text, int x, int y, color clr, int fontsize) {
+   if(ObjectFind(0, name) < 0) {
+      ObjectCreate(0, name, OBJ_LABEL, 0, 0, 0);
+      ObjectSetInteger(0, name, OBJPROP_CORNER, CORNER_LEFT_UPPER);
+      ObjectSetInteger(0, name, OBJPROP_FONTSIZE, fontsize);
+   }
+   ObjectSetString(0, name, OBJPROP_TEXT, text);
+   ObjectSetInteger(0, name, OBJPROP_XDISTANCE, x);
+   ObjectSetInteger(0, name, OBJPROP_YDISTANCE, y);
+   ObjectSetInteger(0, name, OBJPROP_COLOR, clr);
+}
 
-   // --- SELL LOGIC ---
-   if(trend_bearish && IsInZone("SELL"))
-     {
-      if(current_rsi > InpRSIOverbought)
-        {
-         if(current_adx > InpADXThreshold)
-           {
-            if(pat_sell_name != "")
-              {
-               double atr_val = 0;
-               double atr_buf[]; ArraySetAsSeries(atr_buf, true);
-               CopyBuffer(hATR, 0, 0, 1, atr_buf);
-               atr_val = atr_buf[0];
-
-               double sl = SymbolInfoDouble(_Symbol, SYMBOL_BID) + (atr_val * InpSL_Multiplier);
-               double tp = SymbolInfoDouble(_Symbol, SYMBOL_BID) - (atr_val * InpSL_Multiplier * InpRiskReward);
-
-               trade.Sell(InpLotSize, _Symbol, 0, sl, tp, "AurumSniper V9");
-               EnviarWebhook("SELL", "V9: " + pat_sell_name + " + RSI", SymbolInfoDouble(_Symbol, SYMBOL_BID));
-              }
-           }
-        }
-     }
-  }
+// Helper Multidivisa
+bool IsPositionOpenOnSymbol() {
+   for(int i=PositionsTotal()-1; i>=0; i--) {
+      ulong ticket = PositionGetTicket(i);
+      if(PositionSelectByTicket(ticket)) {
+         if(PositionGetString(POSITION_SYMBOL) == _Symbol && PositionGetInteger(POSITION_MAGIC) == MAGIC_NUMBER) {
+            return true;
+         }
+      }
+   }
+   return false;
+}
