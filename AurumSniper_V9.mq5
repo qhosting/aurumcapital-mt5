@@ -293,6 +293,20 @@ void UpdateDashboard() {
       (g_start_balance - AccountInfoDouble(ACCOUNT_EQUITY))/g_start_balance*100, InpMaxDailyLoss);
    DrawLabel("lbl_Risk", dd_txt, 20, 65, clrWhite, 10);
    DrawLabel("lbl_RSI", "RSI: " + DoubleToString(GetBufferVal(hRSI,0), 2), 20, 85, clrWhite, 10);
+
+   // --- ADX Display ---
+   double adx = GetBufferVal(hADX, 0);
+   string adx_txt = "ADX: " + DoubleToString(adx, 2);
+   color adx_clr = clrGray;
+   
+   if(adx > InpADXThreshold) {
+      adx_txt += " (✅ ACTIVO)";
+      adx_clr = clrLime;
+   } else {
+      adx_txt += " (💤 DORMIDO)";
+      adx_clr = clrOrange; // Advertencia
+   }
+   DrawLabel("lbl_ADX", adx_txt, 20, 105, adx_clr, 10);
    
    ChartRedraw();
 }

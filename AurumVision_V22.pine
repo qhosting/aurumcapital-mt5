@@ -208,4 +208,9 @@ if barstate.islast
 
     table.cell(dash, 1, 4, zone_txt, text_color=zone_col)
 
+    // Fila 5: ADX (Nuevo V11)
+    table.cell(dash, 0, 5, "ADX (" + str.tostring(inp_adx_min) + "+)", text_color=c_white)
+    bool adx_ok = adx > inp_adx_min
+    table.cell(dash, 1, 5, str.tostring(adx, "#.##") + (adx_ok ? " (ACTIVO)" : " (DORMIDO)"), text_color = adx_ok ? c_lime : c_orange)
+
 
