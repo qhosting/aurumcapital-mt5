@@ -132,6 +132,26 @@ El bot tiene un "Cinturón de Seguridad" diario:
 3.  **Operar con Noticias:**
     *   Si hay noticias de impacto (Nóminas, Inflación), apaga el sistema.
 
+## 🤖 Configuración del Asesor Experto (AurumSniper MT5)
+
+El código del robot AurumSniper ha sido optimizado con matemáticas institucionales. Cuenta con **ajuste de Spread exacto (Ask/Bid)**, lo que garantiza que tu Take Profit siempre será matemáticamente preciso según el Ratio Riesgo:Beneficio (ej. 1:2) sin importar la comisión del broker.
+
+**IMPORTANTE:** El código del robot es universal, pero cada divisa tiene su "personalidad" (volatilidad) y requiere una configuración específica.
+
+### 🏆 Configuraciones Ganadoras (Validadas en Optimizador)
+
+**Para USDJPY (Tendencia / Volatilidad Baja-Media):**
+*   **Distancia a Zona H1:** `300`
+*   **RSI Sobreventa (Compra):** `40`
+*   **RSI Sobrecompra (Venta):** `60`
+
+**Para EURUSD (Rebotes Rápidos / Volatilidad Media-Alta):**
+*   **Distancia a Zona H1:** `100` (Debe estar pegado a la EMA)
+*   **RSI Sobreventa (Compra):** `45` (Comprar rebotes tempranos)
+*   **RSI Sobrecompra (Venta):** `80`
+
+*Nota: Para probar nuevos pares (ej. XAUUSD), usa el Optimizador de MT5 en modo "Algoritmo Genético Rápido" seleccionando estas 3 variables clave.*
+
 ---
 
 ## 📝 Ejercicio Práctico

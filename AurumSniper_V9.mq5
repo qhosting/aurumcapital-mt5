@@ -24,6 +24,7 @@ input int      InpRSIOversold   = 30;       // Compra (Mas sensible)
 input int      InpADXThreshold  = 20;       // Volatilidad Minima
 
 input group "=== GESTION DE SALIDA PRO ==="
+input double   InpATRMultiplier = 2.0;      // Multiplicador SL (ATR)
 input bool     InpUsePartials   = true;     // Cerrar 50% al 1:1
 input int      InpRiskReward    = 2;        // Ratio riesgo/beneficio
 input int      InpBE_Trigger    = 100;      // Puntos para BreakEven
@@ -118,7 +119,7 @@ void OnTick() {
 
    // COMPRA: Tendencia Alcista + Zona H1 + RSI Sobreventado + ADX
    if(trend_bull && in_zone_buy && rsi < InpRSIOversold && adx > InpADXThreshold) {
-       double sl_dist = atr * 1.5; // SL dinamico por volatilidad
+       double sl_dist = atr * InpATRMultiplier; // SL dinamico por volatilidad
        double tp_dist = sl_dist * InpRiskReward;
        
        double sl = NormalizeDouble(ask - sl_dist, _Digits);
@@ -134,7 +135,7 @@ void OnTick() {
 
    // VENTA: Tendencia Bajista + Zona H1 + RSI Sobrecomprado + ADX
    if(trend_bear && in_zone_sell && rsi > InpRSIOverbought && adx > InpADXThreshold) {
-       double sl_dist = atr * 1.5;
+       double sl_dist = atr * InpATRMultiplier;
        double tp_dist = sl_dist * InpRiskReward;
        
        double sl = NormalizeDouble(bid + sl_dist, _Digits);
@@ -191,7 +192,10 @@ void GestionarPosicionesPro() {
       long type    = PositionGetInteger(POSITION_TYPE);
       double cur_price = PositionGetDouble(POSITION_PRICE_CURRENT);
       
-      double profit_puntos = MathAbs(cur_price - entry) / _Point;
+      // Calcula los puntos matemáticamente según la dirección de la operación
+      double profit_puntos = 0;
+      if (type == POSITION_TYPE_BUY) profit_puntos = (cur_price - entry) / _Point;
+      if (type == POSITION_TYPE_SELL) profit_puntos = (entry - cur_price) / _Point;
       
       // 1. Cierre Parcial al 1:1 (Protege ganancias rápido)
       if(InpUsePartials && vol >= 0.02 && profit_puntos >= InpBE_Trigger) {
