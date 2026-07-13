@@ -122,8 +122,11 @@ void OnTick() {
        double sl_dist = atr * InpATRMultiplier; // SL dinamico por volatilidad
        double tp_dist = sl_dist * InpRiskReward;
        
-       double sl = NormalizeDouble(ask - sl_dist, _Digits);
-       double tp = NormalizeDouble(ask + tp_dist, _Digits);
+       double sl_price = ask - sl_dist;
+       double sl = NormalizeDouble(sl_price - (ask - bid), _Digits);
+       
+       double tp_price = ask + tp_dist;
+       double tp = NormalizeDouble(tp_price - (ask - bid), _Digits);
        
        // Validar distancia minima del broker
        CheckStops(sl, tp, true); 
@@ -138,8 +141,11 @@ void OnTick() {
        double sl_dist = atr * InpATRMultiplier;
        double tp_dist = sl_dist * InpRiskReward;
        
-       double sl = NormalizeDouble(bid + sl_dist, _Digits);
-       double tp = NormalizeDouble(bid - tp_dist, _Digits);
+       double sl_price = bid + sl_dist;
+       double sl = NormalizeDouble(sl_price + (ask - bid), _Digits);
+       
+       double tp_price = bid - tp_dist;
+       double tp = NormalizeDouble(tp_price + (ask - bid), _Digits);
        
        CheckStops(sl, tp, false);
        
