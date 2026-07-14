@@ -14,14 +14,39 @@ c_orange = color.orange
 // ==================== INPUTS ====================
 grp_strat = "Estrategia Sniper V11"
 inp_ma_per    = input.int(200, "Tendencia H1 (EMA)", group=grp_strat) 
-inp_zone_dist = input.int(100, "Distancia Zona (Puntos)", group=grp_strat) 
-inp_rsi_ob    = input.int(70, "RSI Venta (>)", group=grp_strat)
-inp_rsi_os    = input.int(30, "RSI Compra (<)", group=grp_strat)
+inp_zone_dist = input.int(100, "Distancia a Zona H1", group=grp_strat) 
+inp_rsi_ob    = input.int(70, "RSI SobreVenta (> Venta)", group=grp_strat)
+inp_rsi_os    = input.int(30, "RSI Sobrecompra (< Compra)", group=grp_strat)
 inp_adx_min   = input.int(20, "ADX Mínimo", group=grp_strat)
+inp_auto_tune = input.bool(true, "Auto-Ajustar por Activo", group=grp_strat)
 
 grp_risk = "Gestión Salida (Simulación)"
 inp_rr        = input.float(2.0, "Ratio Riesgo:Beneficio", step=0.1, group=grp_risk)
 inp_atr_mult  = input.float(1.5, "Multiplicador SL (x ATR)", step=0.1, group=grp_risk)
+
+// ==================== AUTO-AJUSTE DINÁMICO POR ACTIVO ====================
+int zone_dist = inp_zone_dist
+int rsi_ob    = inp_rsi_ob
+int rsi_os    = inp_rsi_os
+
+if inp_auto_tune
+    string sym = syminfo.ticker
+    if str.contains(sym, "EURUSD")
+        zone_dist := 100
+        rsi_os    := 45
+        rsi_ob    := 80
+    else if str.contains(sym, "USDJPY")
+        zone_dist := 300
+        rsi_os    := 40
+        rsi_ob    := 60
+    else if str.contains(sym, "GBPUSD")
+        zone_dist := 150
+        rsi_os    := 42
+        rsi_ob    := 78
+    else if str.contains(sym, "XAUUSD") or str.contains(sym, "GOLD")
+        zone_dist := 400
+        rsi_os    := 35
+        rsi_ob    := 65
 
 
 // ==================== DATOS MULTI-TIMEFRAME ====================
@@ -42,7 +67,7 @@ trend_bear = close < h1_ema
 
 // 2. ZONAS DE UN HORA (DINAMICA V11)
 // Precio dentro de X distancia de Soportes H1... O rebotando en la EMA (Pullback)
-dist_val = inp_zone_dist * syminfo.mintick
+dist_val = zone_dist * syminfo.mintick
 in_zone_buy  = (math.abs(close - h1_low_20) <= dist_val) or (math.abs(close - h1_ema) <= dist_val)
 in_zone_sell = (math.abs(close - h1_high_20) <= dist_val) or (math.abs(close - h1_ema) <= dist_val)
 
@@ -79,8 +104,8 @@ if trap_bull
 
 // ==================== DISPAROS (TRIGGERS) ====================
 // Condiciones exactas del Bot V11 MT5
-long_cond = trend_bull and in_zone_buy and rsi < inp_rsi_os and adx > inp_adx_min and not is_spike
-short_cond = trend_bear and in_zone_sell and rsi > inp_rsi_ob and adx > inp_adx_min and not is_spike
+long_cond = trend_bull and in_zone_buy and rsi < rsi_os and adx > inp_adx_min and not is_spike
+short_cond = trend_bear and in_zone_sell and rsi > rsi_ob and adx > inp_adx_min and not is_spike
 
 // ==================== EJECUCIÓN & VISUALES ====================
 
@@ -176,7 +201,7 @@ if barstate.islast
 
     // Fila 1: RSI
     table.cell(dash, 0, 1, "RSI (M1)", text_color=c_white)
-    rsi_col = rsi < inp_rsi_os ? c_lime : rsi > inp_rsi_ob ? c_red : c_gray
+    rsi_col = rsi < rsi_os ? c_lime : rsi > rsi_ob ? c_red : c_gray
     table.cell(dash, 1, 1, str.tostring(rsi, "#.##"), text_color=rsi_col)
 
     // Fila 2: Tendencia H1
