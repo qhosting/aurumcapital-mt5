@@ -261,6 +261,7 @@ void GestionarPosicionesPro() {
       ulong ticket = PositionGetTicket(i);
       if(!PositionSelectByTicket(ticket)) continue;
       if(PositionGetInteger(POSITION_MAGIC) != MAGIC_NUMBER) continue;
+      if(PositionGetString(POSITION_SYMBOL) != _Symbol) continue;
 
       double entry = PositionGetDouble(POSITION_PRICE_OPEN);
       double sl    = PositionGetDouble(POSITION_SL);
