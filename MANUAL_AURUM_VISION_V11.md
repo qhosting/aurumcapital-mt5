@@ -142,13 +142,13 @@ El código del robot AurumSniper ha sido optimizado con matemáticas institucion
 
 **Para USDJPY (Tendencia / Volatilidad Baja-Media):**
 *   **Distancia a Zona H1:** `300`
-*   **RSI Sobreventa (Compra):** `40`
-*   **RSI Sobrecompra (Venta):** `60`
+*   **RSI Sobrecompra (<30 compra):** `40`
+*   **RSI SobreVenta (>70 Venta):** `60`
 
 **Para EURUSD (Rebotes Rápidos / Volatilidad Media-Alta):**
 *   **Distancia a Zona H1:** `100` (Debe estar pegado a la EMA)
-*   **RSI Sobreventa (Compra):** `45` (Comprar rebotes tempranos)
-*   **RSI Sobrecompra (Venta):** `80`
+*   **RSI Sobrecompra (<30 compra):** `45` (Comprar rebotes tempranos)
+*   **RSI SobreVenta (>70 Venta):** `80`
 
 *Nota: Para probar nuevos pares (ej. XAUUSD), usa el Optimizador de MT5 en modo "Algoritmo Genético Rápido" seleccionando estas 3 variables clave.*
 

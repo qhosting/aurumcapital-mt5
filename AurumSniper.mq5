@@ -17,10 +17,10 @@ input bool     InpAutoDailyReset= true;     // Resetear contador cada dia
 
 input group "=== ESTRATEGIA SNIPER (V9 Engine) ==="
 input int      InpMaxSpread     = 25;       // Spread maximo (M1 Scalping)
-input int      InpDistanciaPuntos = 100;    // Distancia a Zona H1 (Ampliada)
+input int      InpDistanciaPuntos = 100;    // Distancia a Zona H1
 input int      InpEMAPeriod     = 200;      // Tendencia H1
-input int      InpRSIOverbought = 70;       // Venta (Mas sensible)
-input int      InpRSIOversold   = 30;       // Compra (Mas sensible)
+input int      InpRSIOverbought = 70;       // RSI SobreVenta (>70 Venta)
+input int      InpRSIOversold   = 30;       // RSI Sobrecompra (<30 compra)
 input int      InpADXThreshold  = 20;       // Volatilidad Minima
 
 input group "=== GESTION DE SALIDA PRO ==="
@@ -32,6 +32,7 @@ input int      InpMaxDailyTrades= 3;        // Max Operaciones Diarias
 
 input group "=== OPTIMIZACION DE ACTIVOS ==="
 input bool     InpAutoGoldSettings = true;  // Auto-Ajustar parámetros para ORO (XAUUSD)
+input bool     InpAutoForexSettings = true; // Auto-Ajustar EURUSD y USDJPY
 
 // ==================== GLOBALES ====================
 CTrade trade;
@@ -78,6 +79,23 @@ void AutoTuneAssets() {
          g_rsi_oversold = 35;          // RSI de compra en retroceso más sensible
          g_rsi_overbought = 65;        // RSI de venta en retroceso más sensible
          Print("🦅 [AURUM GOLD MODE] Símbolo de Oro detectado. Ajustes optimizados cargados.");
+      }
+   }
+
+   if(InpAutoForexSettings) {
+      string symbol = _Symbol;
+      StringToUpper(symbol);
+      if(StringFind(symbol, "EURUSD") >= 0) {
+         g_distancia_puntos = 100;     // Pegado a la EMA
+         g_rsi_oversold = 45;          // Compra en rebote temprano
+         g_rsi_overbought = 80;        // Venta
+         Print("🦅 [AURUM FOREX MODE] Símbolo EURUSD detectado. Ajustes optimizados cargados.");
+      }
+      else if(StringFind(symbol, "USDJPY") >= 0) {
+         g_distancia_puntos = 300;     // Tendencia más amplia
+         g_rsi_oversold = 40;          // Compra
+         g_rsi_overbought = 60;        // Venta
+         Print("🦅 [AURUM FOREX MODE] Símbolo USDJPY detectado. Ajustes optimizados cargados.");
       }
    }
 }
