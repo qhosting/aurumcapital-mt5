@@ -32,7 +32,7 @@ input int      InpMaxDailyTrades= 3;        // Max Operaciones Diarias
 
 input group "=== OPTIMIZACION DE ACTIVOS ==="
 input bool     InpAutoGoldSettings = true;  // Auto-Ajustar parámetros para ORO (XAUUSD)
-input bool     InpAutoForexSettings = true; // Auto-Ajustar EURUSD y USDJPY
+input bool     InpAutoForexSettings = true; // Auto-Ajustar EURUSD, USDJPY y GBPUSD
 
 // ==================== GLOBALES ====================
 CTrade trade;
@@ -96,6 +96,12 @@ void AutoTuneAssets() {
          g_rsi_oversold = 40;          // Compra
          g_rsi_overbought = 60;        // Venta
          Print("🦅 [AURUM FOREX MODE] Símbolo USDJPY detectado. Ajustes optimizados cargados.");
+      }
+      else if(StringFind(symbol, "GBPUSD") >= 0) {
+         g_distancia_puntos = 150;     // Un poco más de margen por volatilidad de la Libra
+         g_rsi_oversold = 42;          // Compra
+         g_rsi_overbought = 78;        // Venta
+         Print("🦅 [AURUM FOREX MODE] Símbolo GBPUSD detectado. Ajustes optimizados cargados.");
       }
    }
 }

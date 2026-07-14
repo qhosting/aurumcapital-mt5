@@ -150,6 +150,11 @@ El código del robot AurumSniper ha sido optimizado con matemáticas institucion
 *   **RSI Sobrecompra (<30 compra):** `45` (Comprar rebotes tempranos)
 *   **RSI SobreVenta (>70 Venta):** `80`
 
+**Para GBPUSD (Rebotes Rápidos / Volatilidad Media-Alta):**
+*   **Distancia a Zona H1:** `150` (Margen medio para absorber impulsos de la Libra)
+*   **RSI Sobrecompra (<30 compra):** `42` (Garantiza agotamiento sin perder tantas entradas)
+*   **RSI SobreVenta (>70 Venta):** `78`
+
 *Nota: Para probar nuevos pares (ej. XAUUSD), usa el Optimizador de MT5 en modo "Algoritmo Genético Rápido" seleccionando estas 3 variables clave.*
 
 ---
