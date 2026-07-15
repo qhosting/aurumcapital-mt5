@@ -22,12 +22,14 @@ inp_auto_tune = input.bool(true, "Auto-Ajustar por Activo", group=grp_strat)
 
 grp_risk = "Gestión Salida (Simulación)"
 inp_rr        = input.float(2.0, "Ratio Riesgo:Beneficio", step=0.1, group=grp_risk)
-inp_atr_mult  = input.float(1.5, "Multiplicador SL (x ATR)", step=0.1, group=grp_risk)
+inp_atr_mult  = input.float(2.0, "Multiplicador SL (x ATR)", step=0.1, group=grp_risk)
 
 // ==================== AUTO-AJUSTE DINÁMICO POR ACTIVO ====================
 int zone_dist = inp_zone_dist
 int rsi_ob    = inp_rsi_ob
 int rsi_os    = inp_rsi_os
+int adx_min   = inp_adx_min
+float atr_mult = inp_atr_mult
 
 if inp_auto_tune
     string sym = syminfo.ticker
@@ -47,6 +49,8 @@ if inp_auto_tune
         zone_dist := 400
         rsi_os    := 35
         rsi_ob    := 65
+        adx_min   := 25
+        atr_mult  := 2.5
 
 
 // ==================== DATOS MULTI-TIMEFRAME ====================
@@ -97,15 +101,18 @@ is_bear_engulf = close < open and close[1] > open[1] and close < open[1] and ope
 trap_bear = low < h1_low_20 and close > h1_low_20 and in_zone_buy // Trampa en Soporte (Bullish)
 trap_bull = high > h1_high_20 and close < h1_high_20 and in_zone_sell // Trampa en Resistencia (Bearish)
 
-if trap_bear
-    label.new(bar_index, low, "🪤 Trampa", color=c_lime, style=label.style_label_up, textcolor=c_lime, size=size.tiny)
-if trap_bull
-    label.new(bar_index, high, "🪤 Trampa", color=c_red, style=label.style_label_down, textcolor=c_red, size=size.tiny)
+// Marcamos las trampas históricas en el gráfico para que sean visibles en el Backtest
+plotshape(trap_bear, "Trampa Soporte", shape.labelup, location.belowbar, c_lime, text="🪤 Trampa", textcolor=c_black, size=size.tiny)
+plotshape(trap_bull, "Trampa Resistencia", shape.labeldown, location.abovebar, c_red, text="🪤 Trampa", textcolor=c_white, size=size.tiny)
 
 // ==================== DISPAROS (TRIGGERS) ====================
 // Condiciones exactas del Bot V11 MT5
-long_cond = trend_bull and in_zone_buy and rsi < rsi_os and adx > inp_adx_min and not is_spike
-short_cond = trend_bear and in_zone_sell and rsi > rsi_ob and adx > inp_adx_min and not is_spike
+long_cond_raw = trend_bull and in_zone_buy and rsi < rsi_os and adx > adx_min and not is_spike
+short_cond_raw = trend_bear and in_zone_sell and rsi > rsi_ob and adx > adx_min and not is_spike
+
+// Filtrar para evitar sobreposición (Solo 1 trade a la vez, igual que MT5)
+long_cond = long_cond_raw and strategy.position_size == 0
+short_cond = short_cond_raw and strategy.position_size == 0
 
 // ==================== EJECUCIÓN & VISUALES ====================
 
@@ -136,7 +143,7 @@ if long_cond or short_cond
     
     float en_price = close
     float atr_val  = atr
-    float sl_dist  = atr_val * inp_atr_mult
+    float sl_dist  = atr_val * atr_mult
     float tp_dist  = sl_dist * inp_rr
     
     float sl_price = long_cond ? en_price - sl_dist : en_price + sl_dist
@@ -175,18 +182,18 @@ if is_bull_engulf and in_zone_buy
 if is_bear_engulf and in_zone_sell
     label.new(bar_index, high, "🔄 Engulf", color=color.new(c_red, 100), style=label.style_label_down, textcolor=c_red, size=size.tiny)
 
-// Ejecución de Estrategia
+// Ejecución de Estrategia (Manejo Exacto de Precios en lugar de Ticks)
 if long_cond
-    sl_pips = (atr * inp_atr_mult)
-    tp_pips = sl_pips * inp_rr
+    sl_dist = (atr * atr_mult)
+    tp_dist = sl_dist * inp_rr
     strategy.entry("Sniper Buy", strategy.long)
-    strategy.exit("Exit Buy", "Sniper Buy", loss = sl_pips / syminfo.mintick, profit = tp_pips / syminfo.mintick)
+    strategy.exit("Exit Buy", "Sniper Buy", stop = close - sl_dist, limit = close + tp_dist)
 
 if short_cond
-    sl_pips = (atr * inp_atr_mult)
-    tp_pips = sl_pips * inp_rr
+    sl_dist = (atr * atr_mult)
+    tp_dist = sl_dist * inp_rr
     strategy.entry("Sniper Sell", strategy.short)
-    strategy.exit("Exit Sell", "Sniper Sell", loss = sl_pips / syminfo.mintick, profit = tp_pips / syminfo.mintick)
+    strategy.exit("Exit Sell", "Sniper Sell", stop = close + sl_dist, limit = close - tp_dist)
 
 // Señales en Gráfico
 plotshape(long_cond, "BUY", shape.triangleup, location.belowbar, col_bull, size=size.small, text="SNIPER-V11")

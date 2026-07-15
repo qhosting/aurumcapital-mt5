@@ -28,7 +28,7 @@ input double   InpATRMultiplier = 2.0;      // Multiplicador SL (ATR)
 input bool     InpUsePartials   = true;     // Cerrar 50% al 1:1
 input int      InpRiskReward    = 2;        // Ratio riesgo/beneficio
 input int      InpBE_Trigger    = 100;      // Puntos para BreakEven
-input int      InpMaxDailyTrades= 3;        // Max Operaciones Diarias
+input int      InpMaxDailyTrades= 16;       // Max Operaciones Diarias
 
 input group "=== OPTIMIZACION DE ACTIVOS ==="
 input bool     InpAutoGoldSettings = true;  // Auto-Ajustar parámetros para ORO (XAUUSD)
