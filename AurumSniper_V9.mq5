@@ -29,6 +29,9 @@ input bool     InpUsePartials   = true;     // Cerrar 50% al 1:1
 input int      InpRiskReward    = 2;        // Ratio riesgo/beneficio
 input int      InpBE_Trigger    = 100;      // Puntos para BreakEven
 input int      InpMaxDailyTrades= 16;       // Max Operaciones Diarias
+input bool     InpUseTrailingStop = true;   // Usar Trailing Stop (Recorrer Ganancias)
+input int      InpTrailingStart   = 150;    // Puntos para iniciar Trailing (despues del BE)
+input int      InpTrailingStep    = 50;     // Puntos de paso para mover SL
 
 input group "=== OPTIMIZACION DE ACTIVOS ==="
 input bool     InpAutoGoldSettings = true;  // Auto-Ajustar parámetros para ORO (XAUUSD)
@@ -52,6 +55,8 @@ double g_atr_multiplier;
 int g_rsi_overbought;
 int g_rsi_oversold;
 bool g_gold_mode_active = false;
+double g_momentum_spike_multiplier;
+double g_risk_reward;
 
 // Módulo de Auto-Detección y Configuración para ORO
 void AutoTuneAssets() {
@@ -64,6 +69,8 @@ void AutoTuneAssets() {
    g_rsi_overbought = InpRSIOverbought;
    g_rsi_oversold = InpRSIOversold;
    g_gold_mode_active = false;
+   g_momentum_spike_multiplier = 3.0; // Default
+   g_risk_reward = InpRiskReward;     // Default
 
    if(InpAutoGoldSettings) {
       string symbol = _Symbol;
@@ -89,20 +96,39 @@ void AutoTuneAssets() {
          g_distancia_puntos = 100;     // Pegado a la EMA
          g_rsi_oversold = 45;          // Compra en rebote temprano
          g_rsi_overbought = 80;        // Venta
+         g_atr_multiplier = 2.5;       // SL más amplio para dar respiro
+         g_risk_reward = 1.5;          // Ratio Beneficio ajustado
+         g_momentum_spike_multiplier = 4.5; // Relajar filtro vela elefante
          Print("🦅 [AURUM FOREX MODE] Símbolo EURUSD detectado. Ajustes optimizados cargados.");
       }
       else if(StringFind(symbol, "USDJPY") >= 0) {
          g_distancia_puntos = 300;     // Tendencia más amplia
          g_rsi_oversold = 40;          // Compra
          g_rsi_overbought = 60;        // Venta
+         g_be_trigger = 150;           // BreakEven a 150 puntos para evitar salidas prematuras por ruido
+         g_atr_multiplier = 2.5;       // SL más amplio
+         g_risk_reward = 1.5;          // TP más realista para asegurar ganancias
+         g_momentum_spike_multiplier = 4.0; // Relajar un poco vela elefante
          Print("🦅 [AURUM FOREX MODE] Símbolo USDJPY detectado. Ajustes optimizados cargados.");
       }
       else if(StringFind(symbol, "GBPUSD") >= 0) {
          g_distancia_puntos = 150;     // Un poco más de margen por volatilidad de la Libra
          g_rsi_oversold = 42;          // Compra
          g_rsi_overbought = 78;        // Venta
+         g_be_trigger = 200;           // Holgura para BreakEven (antes 100) para aguantar retrocesos
+         g_atr_multiplier = 2.5;       // SL más amplio
+         g_risk_reward = 1.5;          // TP más realista
+         g_momentum_spike_multiplier = 4.5; // Relajar vela elefante
          Print("🦅 [AURUM FOREX MODE] Símbolo GBPUSD detectado. Ajustes optimizados cargados.");
       }
+   }
+
+   // --- PROTECCIÓN DE VOLUMEN ---
+   // Asegurar que el lotaje nunca sea menor al mínimo permitido por el bróker para este símbolo
+   double min_vol = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN);
+   if(g_lot_size < min_vol) {
+      Print("⚠️ [VOLUMEN CORREGIDO] Lotaje ", DoubleToString(g_lot_size, 2), " es menor al mínimo. Ajustado a: ", DoubleToString(min_vol, 2));
+      g_lot_size = min_vol;
    }
 }
 
@@ -139,6 +165,43 @@ void OnDeinit(const int reason) {
 }
 
 //+------------------------------------------------------------------+
+//| X-RAY DEBUG MODE                                                 |
+//+------------------------------------------------------------------+
+void DebugSignalMiss(string direction, bool trend, bool in_zone, double rsi, double adx, bool is_spike, bool has_open_trade, bool good_spread, bool daily_limit) {
+    if(!in_zone) return; // Solo nos importa si el precio llegó a la zona
+    
+    double open1 = iOpen(_Symbol, _Period, 1);
+    double close1 = iClose(_Symbol, _Period, 1);
+    long current_spread = SymbolInfoInteger(_Symbol, SYMBOL_SPREAD);
+    
+    if(direction == "BUY" && close1 > open1) {
+        string reason = "";
+        if(!trend) reason += "[Precio < EMA] ";
+        if(rsi >= g_rsi_oversold) reason += "[RSI=" + DoubleToString(rsi, 1) + " (Req < " + DoubleToString(g_rsi_oversold, 1) + ")] ";
+        if(adx <= g_adx_threshold) reason += "[ADX=" + DoubleToString(adx, 1) + " (Req > " + DoubleToString(g_adx_threshold, 1) + ")] ";
+        if(is_spike) reason += "[Bloqueo Vela Elefante] ";
+        if(!good_spread) reason += "[Spread alto: " + IntegerToString(current_spread) + " ptos] ";
+        if(daily_limit) reason += "[Meta Diaria alcanzada] ";
+        if(has_open_trade) reason += "[Trade abierto] ";
+        
+        if(reason != "") Print("🔍 [X-RAY COMPRA OMITIDA] ", _Symbol, ": ", reason);
+    }
+    
+    if(direction == "SELL" && close1 < open1) {
+        string reason = "";
+        if(!trend) reason += "[Precio > EMA] ";
+        if(rsi <= g_rsi_overbought) reason += "[RSI=" + DoubleToString(rsi, 1) + " (Req > " + DoubleToString(g_rsi_overbought, 1) + ")] ";
+        if(adx <= g_adx_threshold) reason += "[ADX=" + DoubleToString(adx, 1) + " (Req > " + DoubleToString(g_adx_threshold, 1) + ")] ";
+        if(is_spike) reason += "[Bloqueo Vela Elefante] ";
+        if(!good_spread) reason += "[Spread alto: " + IntegerToString(current_spread) + " ptos] ";
+        if(daily_limit) reason += "[Meta Diaria alcanzada] ";
+        if(has_open_trade) reason += "[Trade abierto] ";
+        
+        if(reason != "") Print("🔍 [X-RAY VENTA OMITIDA] ", _Symbol, ": ", reason);
+    }
+}
+
+//+------------------------------------------------------------------+
 //| Main Engine                                                      |
 //+------------------------------------------------------------------+
 void OnTick() {
@@ -154,24 +217,7 @@ void OnTick() {
    // 2. Gestion de Posiciones (Cierres Parciales V1.05)
    GestionarPosicionesPro();
    
-   if(IsPositionOpenOnSymbol()) return; // Solo esperar si ESTE simbolo tiene trade activo
-   if(!CheckSpread()) return;
-   
-   // 3. Logica de Entrada Sniper (V9)
-   if(!IsNewBar()) return;
-   
-   // Check Max Trades Diarios
-   if(g_daily_trades >= InpMaxDailyTrades) {
-       Comment("\n😴 META DIARIA ALCANZADA (" + IntegerToString(g_daily_trades) + "/" + IntegerToString(InpMaxDailyTrades) + "). HASTA MAÑANA.");
-       return;
-   }
-   
-   // --- FILTRO ANTI-TREN (NUEVO) ---
-   // Si la vela anterior fue explosiva (3x el promedio), NO operar reversión
-   if(IsMomentumSpike()) {
-       Print("⚠️ ALERTA: Vela 'Elefante' detectada. Operación cancelada por inercia fuerte.");
-       return;
-   }
+   if(!IsNewBar()) return; // 3. Logica de Entrada Sniper (V9)
    
    double ma_h1 = GetBufferVal(hMA, 0);
    double rsi   = GetBufferVal(hRSI, 1); // Vela cerrada
@@ -187,11 +233,34 @@ void OnTick() {
    double atr = GetBufferVal(hATR, 1);
    double ask = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
    double bid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
+   
+   // Evaluaciones de restricciones globales
+   bool has_open_trade = IsPositionOpenOnSymbol();
+   bool good_spread = CheckSpread();
+   bool daily_limit_reached = (g_daily_trades >= InpMaxDailyTrades);
+   
+   if(daily_limit_reached) {
+       Comment("\n😴 META DIARIA ALCANZADA (" + IntegerToString(g_daily_trades) + "/" + IntegerToString(InpMaxDailyTrades) + "). HASTA MAÑANA.");
+   }
+   
+   bool is_spike_buy = false;
+   bool is_spike_sell = false;
+   
+   // Solo calcular elefante si estamos en zona (ahorrar recursos)
+   if(in_zone_buy) is_spike_buy = IsMomentumSpike("BUY");
+   if(in_zone_sell) is_spike_sell = IsMomentumSpike("SELL");
+   
+   // --- MODO X-RAY (DEBUG) ---
+   DebugSignalMiss("BUY", trend_bull, in_zone_buy, rsi, adx, is_spike_buy, has_open_trade, good_spread, daily_limit_reached);
+   DebugSignalMiss("SELL", trend_bear, in_zone_sell, rsi, adx, is_spike_sell, has_open_trade, good_spread, daily_limit_reached);
+   
+   // Si no se puede operar por reglas globales, salir
+   if(has_open_trade || !good_spread || daily_limit_reached) return;
 
    // COMPRA: Tendencia Alcista + Zona H1 + RSI Sobreventado + ADX
-    if(trend_bull && in_zone_buy && rsi < g_rsi_oversold && adx > g_adx_threshold) {
+    if(trend_bull && in_zone_buy && rsi < g_rsi_oversold && adx > g_adx_threshold && !is_spike_buy) {
         double sl_dist = atr * g_atr_multiplier; // SL dinamico por volatilidad
-        double tp_dist = sl_dist * InpRiskReward;
+        double tp_dist = sl_dist * g_risk_reward;
         
         double sl_price = ask - sl_dist;
         double sl = NormalizeDouble(sl_price - (ask - bid), _Digits);
@@ -208,9 +277,9 @@ void OnTick() {
     }
 
     // VENTA: Tendencia Bajista + Zona H1 + RSI Sobrecomprado + ADX
-    if(trend_bear && in_zone_sell && rsi > g_rsi_overbought && adx > g_adx_threshold) {
+    if(trend_bear && in_zone_sell && rsi > g_rsi_overbought && adx > g_adx_threshold && !is_spike_sell) {
         double sl_dist = atr * g_atr_multiplier;
-        double tp_dist = sl_dist * InpRiskReward;
+        double tp_dist = sl_dist * g_risk_reward;
         
         double sl_price = bid + sl_dist;
         double sl = NormalizeDouble(sl_price + (ask - bid), _Digits);
@@ -280,13 +349,60 @@ void GestionarPosicionesPro() {
           // Si el SL aun está en riesgo (no breakeven), lo protegemos
           bool is_risky = (type==POSITION_TYPE_BUY) ? (sl < entry) : (sl > entry);
           if(is_risky) {
-             if(InpUsePartials && vol >= 0.02) {
-                trade.PositionClosePartial(ticket, vol/2.0); // Cierra mitad
-                Print("🛡️ SHIELD: Parcial Cerrado.");
+             if(InpUsePartials) {
+                 double min_vol = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN);
+                 double step_vol = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_STEP);
+                 
+                 double half_vol = NormalizeDouble(vol / 2.0, 2);
+                 double partial = MathFloor(half_vol / step_vol) * step_vol;
+                 
+                 if (partial >= min_vol && (vol - partial) >= min_vol) {
+                     trade.PositionClosePartial(ticket, partial);
+                     Print("🛡️ SHIELD: Parcial Cerrado (Vol: ", DoubleToString(partial, 2), ").");
+                 }
              }
              double new_sl = entry; // Mueve SL a Entrada (BreakEven estricto)
              trade.PositionModify(ticket, new_sl, tp);
              Print("🛡️ SHIELD ACTIVADO: BreakEven establecido.");
+          }
+      }
+      
+      // 2. Trailing Stop Loss (Recorrer Ganancias)
+      if(InpUseTrailingStop && profit_puntos >= InpTrailingStart) {
+          double step_points = InpTrailingStep * _Point;
+          double min_stop_level = SymbolInfoInteger(_Symbol, SYMBOL_TRADE_STOPS_LEVEL) * _Point;
+          double new_sl = sl;
+          bool modify_needed = false;
+          
+          if(type == POSITION_TYPE_BUY) {
+              // El SL propuesto es el precio actual menos la distancia del trailing
+              double proposed_sl = NormalizeDouble(cur_price - (InpTrailingStart * _Point), _Digits);
+              
+              // Solo actualizamos si el nuevo SL asegura MÁS ganancias y respeta el step
+              if(proposed_sl > sl + step_points) {
+                  // Asegurar que respeta la distancia mínima del broker
+                  if(cur_price - proposed_sl >= min_stop_level) {
+                      new_sl = proposed_sl;
+                      modify_needed = true;
+                  }
+              }
+          } else if(type == POSITION_TYPE_SELL) {
+              double proposed_sl = NormalizeDouble(cur_price + (InpTrailingStart * _Point), _Digits);
+              
+              // Cuidado al vender: el SL debe ser menor para asegurar ganancias. 
+              // Si sl == 0 (no tenia) o el nuevo SL es mejor (mas bajo), actualizamos
+              if(sl == 0 || proposed_sl < sl - step_points) {
+                  if(proposed_sl - cur_price >= min_stop_level) {
+                      new_sl = proposed_sl;
+                      modify_needed = true;
+                  }
+              }
+          }
+          
+          if(modify_needed) {
+              if(trade.PositionModify(ticket, new_sl, tp)) {
+                  Print("🏃 TRAILING STOP: SL movido a ", DoubleToString(new_sl, _Digits), " para proteger ganancias.");
+              }
           }
       }
    }
@@ -328,19 +444,33 @@ bool IsNewBar() {
    return true;
 }
 
-// Filtro de Inercia (Evita operar contra velas gigantes - Memoria 3 Velas)
-bool IsMomentumSpike() {
+// Filtro de Inercia Direccional (Solo bloquea si el spike va en CONTRA de nuestro trade)
+// Para igualar a TradingView, evaluamos la vela "k=2" (la vela anterior a la señal).
+bool IsMomentumSpike(string direction) {
    double body_avg = 0;
-   for(int i=4; i<=13; i++) { // Promedio de 10 velas anteriores al grupo reciente
+   for(int i=5; i<=14; i++) { // Desfasado en 1 para promediar las anteriores a k=2
       body_avg += MathAbs(iClose(_Symbol,_Period,i) - iOpen(_Symbol,_Period,i));
    }
+   if(body_avg == 0) return false;
    body_avg /= 10.0;
    
-   // Chequear solo la ULTIMA vela cerrada (Agilidad Sniper)
-   // Si la vela 1 fue explosiva, esperamos 1 minuto. Si la vela 1 es normal, entramos.
-   for(int k=1; k<=1; k++) {
-      double candle_body = MathAbs(iClose(_Symbol,_Period,k) - iOpen(_Symbol,_Period,k));
-      if (candle_body > body_avg * 3.0) return true; 
+   // En TradingView, la alerta de spike evalúa la vela ANTERIOR a la señal (body[1]).
+   // Dado que MT5 evalúa en el OPEN de la vela posterior a la señal (la entrada),
+   // la señal fue en k=1, por tanto, la vela anterior a la señal es k=2.
+   double open2 = iOpen(_Symbol,_Period,2);
+   double close2 = iClose(_Symbol,_Period,2);
+   double candle_body = MathAbs(close2 - open2);
+   
+   if (candle_body > body_avg * g_momentum_spike_multiplier) {
+       // Es un spike. Bloqueamos solo si va EN CONTRA del trade.
+       if (direction == "BUY" && close2 < open2) {
+           Print("⚠️ ALERTA: Vela 'Elefante' BAJISTA detectada. Compra cancelada por inercia en contra.");
+           return true; 
+       }
+       if (direction == "SELL" && close2 > open2) {
+           Print("⚠️ ALERTA: Vela 'Elefante' ALCISTA detectada. Venta cancelada por inercia en contra.");
+           return true; 
+       }
    }
    
    return false;
