@@ -15,6 +15,10 @@ input double   InpLotSize       = 0.02;     // Lote Base
 input double   InpMaxDailyLoss  = 3.0;      // % Max Perdida Diaria Shield
 input bool     InpAutoDailyReset= true;     // Resetear contador cada dia
 
+input group "=== AUTO-TUNING POR ACTIVO (V12.1) ==="
+input bool     InpAutoGoldSettings  = true;     // Auto-ajustes optimizados para ORO (XAUUSD)
+input bool     InpAutoForexSettings = true;     // Auto-ajustes optimizados para Forex (EURUSD/USDJPY/GBPUSD)
+
 input group "=== ESTRATEGIA SNIPER (V9 Engine - Flexibilizado) ==="
 input int      InpMaxSpread     = 32;       // Spread maximo (M1 Scalping)
 input int      InpDistanciaPuntos = 150;    // Distancia a Zona H1
@@ -34,13 +38,14 @@ input bool     InpUseTrailingStop    = true;// Habilitar Trailing Stop dinámico
 input int      InpTrailingStep       = 50;  // Pista de avance Trailing (puntos)
 input int      InpMaxDailyTrades= 16;       // Max Operaciones Diarias
 
-input group "=== OPTIMIZACION DE ACTIVOS ==="
-input bool     InpAutoGoldSettings = true;  // Auto-Ajustar parámetros para ORO (XAUUSD)
-input bool     InpAutoForexSettings = true; // Auto-Ajustar EURUSD, USDJPY y GBPUSD
+input group "=== FILTRO MULTITEMPORALIDAD (MTF) ==="
+input bool            InpUseMTFFilter     = true;       // Habilitar Filtro MTF (H4 + H1)
+input ENUM_TIMEFRAMES InpHTFTimeframe     = PERIOD_H4;  // Temporalidad Mayor de Referencia (H4)
+input bool            InpUseEMAInclinacion= true;       // Exigir Inclinacion (Slope) en EMA H4
 
 // ==================== GLOBALES ====================
 CTrade trade;
-int hMA, hRSI, hADX, hATR;
+int hMA, hMA_HTF, hRSI, hADX, hATR;
 double g_start_equity = 0;
 datetime g_last_reset_day = 0;
 int g_daily_trades = 0; // Contador de trades hoy
@@ -59,7 +64,7 @@ bool g_gold_mode_active = false;
 double g_momentum_spike_multiplier;
 double g_risk_reward;
 
-// Módulo de Auto-Detección y Configuración para ORO (V12 Optimized - High Frequency)
+// Módulo de Auto-Detección y Configuración (V12.1 Optimized)
 void AutoTuneAssets() {
    g_lot_size = InpLotSize;
    g_max_spread = InpMaxSpread;
@@ -79,14 +84,15 @@ void AutoTuneAssets() {
       if(StringFind(symbol, "XAU") >= 0 || StringFind(symbol, "GOLD") >= 0) {
          g_gold_mode_active = true;
          g_lot_size = 0.01;            // Reducir riesgo para cuenta pequeña ($200 equidad)
-         g_max_spread = 75;            // Permitir operar con spreads normales de Oro (hasta 7.5 pips / 75 ptos)
+         g_max_spread = 75;            // Spreads normales de Oro (hasta 7.5 pips / 75 ptos)
          g_distancia_puntos = 800;     // Ampliado para flexibilidad H1/EMA ($8.00 USD)
-         g_be_trigger = 350;           // Mover SL a BE tras $3.50 de ganancia
+         g_be_trigger = 550;           // Mover SL a BE tras $5.50 USD de ganancia (evita cortar ganancias prematuras)
          g_adx_threshold = 18;         // Filtro ADX flexibilizado a 18
-         g_atr_multiplier = 2.5;       // SL más amplio (2.5x ATR) por alta volatilidad
+         g_atr_multiplier = 1.5;       // SL optimizado a 1.5x ATR (reduce la pérdida por Stop Loss a ~$7-8 USD)
+         g_risk_reward = 1.8;          // Risk/Reward objetivo 1.8x
          g_rsi_oversold = 44;          // RSI de compra en retroceso más ágil
          g_rsi_overbought = 56;        // RSI de venta en retroceso más ágil
-         Print("🦅 [AURUM GOLD MODE V12 ACTIVE] Símbolo de Oro detectado. Ajustes optimizados flexibilizados cargados.");
+         Print("🦅 [AURUM GOLD MODE V12.1 ACTIVE] Símbolo de Oro detectado. Ajustes V12.1 cargados (BE: 550pt, SL: 1.5x ATR, R:R 1.8).");
       }
    }
 
@@ -96,34 +102,35 @@ void AutoTuneAssets() {
       if(StringFind(symbol, "EURUSD") >= 0) {
          g_distancia_puntos = 250;     // Zona flexible
          g_rsi_oversold = 44;          // Compra en rebote temprano
-         g_rsi_overbought = 60;        // Venta optimizada (antes 70.0)
+         g_rsi_overbought = 60;        // Venta optimizada
          g_adx_threshold = 15;         // ADX 15
-         g_atr_multiplier = 2.5;       // SL más amplio para dar respiro
-         g_risk_reward = 1.5;          // Ratio Beneficio ajustado
+         g_be_trigger = 200;           // BE a 20 pips
+         g_atr_multiplier = 2.5;       // SL amplio para dar respiro
+         g_risk_reward = 1.8;          // Ratio Beneficio ajustado
          g_momentum_spike_multiplier = 4.5; // Relajar filtro vela elefante
-         Print("🦅 [AURUM FOREX MODE V12] Símbolo EURUSD detectado. Ajustes V12 cargados (RSI 60/44).");
+         Print("🦅 [AURUM FOREX MODE V12.1] Símbolo EURUSD detectado. Ajustes V12.1 cargados (RSI 60/44, R:R 1.8).");
       }
       else if(StringFind(symbol, "USDJPY") >= 0) {
          g_distancia_puntos = 550;     // Tendencia más amplia
          g_rsi_oversold = 46;          // Compra
          g_rsi_overbought = 56;        // Venta optimizada
          g_adx_threshold = 15;         // ADX 15
-         g_be_trigger = 150;           // BreakEven a 150 puntos
-         g_atr_multiplier = 2.5;       // SL más amplio
-         g_risk_reward = 1.5;          // TP más realista
+         g_be_trigger = 250;           // BreakEven a 250 puntos (holgura contra ruido en M5/M15)
+         g_atr_multiplier = 2.0;       // SL optimizado
+         g_risk_reward = 1.8;          // TP más amplio
          g_momentum_spike_multiplier = 4.0; // Relajar vela elefante
-         Print("🦅 [AURUM FOREX MODE V12] Símbolo USDJPY detectado. Ajustes V12 cargados (RSI 56/46).");
+         Print("🦅 [AURUM FOREX MODE V12.1] Símbolo USDJPY detectado. Ajustes V12.1 cargados (BE: 250pt, SL: 2.0x ATR).");
       }
       else if(StringFind(symbol, "GBPUSD") >= 0) {
-         g_distancia_puntos = 350;     // Margin adicional por volatilidad
+         g_distancia_puntos = 350;     // Margen adicional por volatilidad
          g_rsi_oversold = 45;          // Compra
          g_rsi_overbought = 60;        // Venta optimizada
          g_adx_threshold = 15;         // ADX 15
-         g_be_trigger = 200;           // Holgura para BreakEven
-         g_atr_multiplier = 2.5;       // SL más amplio
-         g_risk_reward = 1.5;          // TP más realista
+         g_be_trigger = 300;           // Holgura para BreakEven (30 pips)
+         g_atr_multiplier = 2.0;       // SL optimizado
+         g_risk_reward = 1.8;          // TP más realista
          g_momentum_spike_multiplier = 4.5; // Relajar vela elefante
-         Print("🦅 [AURUM FOREX MODE V12] Símbolo GBPUSD detectado. Ajustes V12 cargados.");
+         Print("🦅 [AURUM FOREX MODE V12.1] Símbolo GBPUSD detectado. Ajustes V12.1 cargados (BE: 300pt, SL: 2.0x ATR).");
       }
    }
 
@@ -157,21 +164,22 @@ int OnInit() {
    g_start_equity = AccountInfoDouble(ACCOUNT_EQUITY);
    g_last_reset_day = iTime(_Symbol, PERIOD_D1, 0);
 
-   // Inicializar Indicadores Sniper (V9 - H1 Tendencia)
-   hMA  = iMA(_Symbol, PERIOD_H1, InpEMAPeriod, 0, MODE_EMA, PRICE_CLOSE);
-   hRSI = iRSI(_Symbol, _Period, 14, PRICE_CLOSE);
-   hADX = iADX(_Symbol, _Period, 14);
-   hATR = iATR(_Symbol, _Period, 14); // Volatilidad para SL Dinamico
+   // Inicializar Indicadores Sniper (V9 - H1 Tendencia + MTF HTF)
+   hMA     = iMA(_Symbol, PERIOD_H1, InpEMAPeriod, 0, MODE_EMA, PRICE_CLOSE);
+   hMA_HTF = iMA(_Symbol, InpHTFTimeframe, InpEMAPeriod, 0, MODE_EMA, PRICE_CLOSE);
+   hRSI    = iRSI(_Symbol, _Period, 14, PRICE_CLOSE);
+   hADX    = iADX(_Symbol, _Period, 14);
+   hATR    = iATR(_Symbol, _Period, 14); // Volatilidad para SL Dinamico
    
-   if(hMA==INVALID_HANDLE || hRSI==INVALID_HANDLE || hADX==INVALID_HANDLE) return(INIT_FAILED);
+   if(hMA==INVALID_HANDLE || hMA_HTF==INVALID_HANDLE || hRSI==INVALID_HANDLE || hADX==INVALID_HANDLE) return(INIT_FAILED);
    
    EventSetTimer(1); // Dashboard Timer
-   Print("🦅 AURUM V11 ULTIMATE: Sniper Engine + Equity Guard Loaded.");
+   Print("🦅 AURUM V12 ULTIMATE: Sniper Engine + MTF Guard Loaded.");
    return(INIT_SUCCEEDED);
 }
 
 void OnDeinit(const int reason) {
-   IndicatorRelease(hMA); IndicatorRelease(hRSI); IndicatorRelease(hADX);
+   IndicatorRelease(hMA); IndicatorRelease(hMA_HTF); IndicatorRelease(hRSI); IndicatorRelease(hADX); IndicatorRelease(hATR);
    EventKillTimer();
    ObjectsDeleteAll(0, "lbl_");
 }
@@ -188,7 +196,7 @@ void DebugSignalMiss(string direction, bool trend, bool in_zone, double rsi, dou
     
     if(direction == "BUY" && close1 > open1) {
         string reason = "";
-        if(!trend) reason += "[Precio < EMA] ";
+        if(!trend) reason += "[Sin Alineacion Tendencia H1/MTF] ";
         if(rsi >= eff_rsi_oversold) reason += "[RSI=" + DoubleToString(rsi, 1) + " (Req < " + DoubleToString(eff_rsi_oversold, 1) + ")] ";
         if(adx <= g_adx_threshold) reason += "[ADX=" + DoubleToString(adx, 1) + " (Req > " + DoubleToString(g_adx_threshold, 1) + ")] ";
         if(is_spike) reason += "[Bloqueo Vela Elefante] ";
@@ -201,7 +209,7 @@ void DebugSignalMiss(string direction, bool trend, bool in_zone, double rsi, dou
     
     if(direction == "SELL" && close1 < open1) {
         string reason = "";
-        if(!trend) reason += "[Precio > EMA] ";
+        if(!trend) reason += "[Sin Alineacion Tendencia H1/MTF] ";
         if(rsi <= eff_rsi_overbought) reason += "[RSI=" + DoubleToString(rsi, 1) + " (Req > " + DoubleToString(eff_rsi_overbought, 1) + ")] ";
         if(adx <= g_adx_threshold) reason += "[ADX=" + DoubleToString(adx, 1) + " (Req > " + DoubleToString(g_adx_threshold, 1) + ")] ";
         if(is_spike) reason += "[Bloqueo Vela Elefante] ";
@@ -231,14 +239,28 @@ void OnTick() {
    
    if(!IsNewBar()) return; // 3. Logica de Entrada Sniper (V12)
    
-   double ma_h1 = GetBufferVal(hMA, 0);
-   double rsi   = GetBufferVal(hRSI, 1); // Vela cerrada
-   double adx   = GetBufferVal(hADX, 1);
-   double close = iClose(_Symbol, _Period, 1);
+   double ma_h1     = GetBufferVal(hMA, 0);
+   double ma_htf    = GetBufferVal(hMA_HTF, 0);
+   double ma_htf_p2 = GetBufferVal(hMA_HTF, 2);
+   double rsi       = GetBufferVal(hRSI, 1); // Vela cerrada
+   double adx       = GetBufferVal(hADX, 1);
+   double close     = iClose(_Symbol, _Period, 1);
    double current_price = iClose(_Symbol, _Period, 0);
 
    bool trend_bull = (current_price > ma_h1); 
    bool trend_bear = (current_price < ma_h1);
+   
+   // V12.1: Filtro MTF (Alineacion HTF + Slope Inclinacion)
+   if(InpUseMTFFilter) {
+      bool htf_bull = (current_price > ma_htf);
+      bool htf_bear = (current_price < ma_htf);
+      if(InpUseEMAInclinacion) {
+         htf_bull = htf_bull && (ma_htf > ma_htf_p2);
+         htf_bear = htf_bear && (ma_htf < ma_htf_p2);
+      }
+      trend_bull = trend_bull && htf_bull;
+      trend_bear = trend_bear && htf_bear;
+   }
    
    // V12: IsInZone Adaptativo por ATR y Momentum ADX
    bool in_zone_buy  = IsInZone("BUY", ma_h1, adx);
@@ -526,6 +548,21 @@ void UpdateDashboard() {
    }
    
    DrawLabel("lbl_Trend", "Tendencia H1: " + trend_txt, 20, y_offset, trend_clr, 10);
+   y_offset += 20;
+   
+   // --- MTF Display ---
+   double ma_htf = GetBufferVal(hMA_HTF, 0);
+   double ma_htf_p2 = GetBufferVal(hMA_HTF, 2);
+   bool htf_bull = (price > ma_htf);
+   bool htf_bear = (price < ma_htf);
+   if(InpUseEMAInclinacion) {
+      htf_bull = htf_bull && (ma_htf > ma_htf_p2);
+      htf_bear = htf_bear && (ma_htf < ma_htf_p2);
+   }
+   string mtf_txt = !InpUseMTFFilter ? "OFF (Solo H1)" : (htf_bull ? "ALCISTA (✅)" : (htf_bear ? "BAJISTA (✅)" : "CONFLICTO/PLANO (❌)"));
+   color mtf_clr  = !InpUseMTFFilter ? clrGray : (htf_bull ? clrLime : (htf_bear ? clrRed : clrOrange));
+
+   DrawLabel("lbl_MTF", "Filtro MTF (" + EnumToString(InpHTFTimeframe) + "): " + mtf_txt, 20, y_offset, mtf_clr, 10);
    y_offset += 20;
    
    string dd_txt = StringFormat("Drawdown Diario: %.2f %% / Max %.1f %%", 
