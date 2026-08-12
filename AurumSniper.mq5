@@ -10,9 +10,11 @@
 #include <Trade\Trade.mqh>
 
 // ==================== INPUTS ====================
-input group "=== GESTION DE RIESGO AVANZADA (V1.05) ==="
-input double   InpLotSize       = 0.02;     // Lote Base
-input double   InpMaxDailyLoss  = 3.0;      // % Max Perdida Diaria Shield
+input group "=== GESTION DE RIESGO AVANZADA (V1.05 / V12.2) ==="
+input double   InpLotSize           = 0.02;     // Lote Base (si no se usa % dinámico)
+input bool     InpUseAutoRiskPercent= true;     // Usar Gestión de Riesgo % Dinámico por Trade
+input double   InpRiskPercent       = 2.0;      // % de Patrimonio a arriesgar por trade (Recomendado 2.0%)
+input double   InpMaxDailyLoss      = 3.0;      // % Max Perdida Diaria Shield
 input bool     InpAutoDailyReset= true;     // Resetear contador cada dia
 
 input group "=== AUTO-TUNING POR ACTIVO (V12.1) ==="
@@ -34,9 +36,18 @@ input int      InpRiskReward    = 2;        // Ratio riesgo/beneficio
 input int      InpBE_Trigger    = 100;      // Puntos de ganancia para activar BreakEven
 input int      InpBE_LockPips   = 10;       // Puntos asegurados sobre la entrada (Ganancia cubierta / No perder)
 input bool     InpManageManualTrades = true;// Administrar operaciones MANUALES en este activo
+input bool     InpAutoSetManualSLTP  = true;// Auto-colocar SL y TP inicial a entradas sin protección (Manuales/One-Click)
 input bool     InpUseTrailingStop    = true;// Habilitar Trailing Stop dinámico
 input int      InpTrailingStep       = 50;  // Pista de avance Trailing (puntos)
 input int      InpMaxDailyTrades= 16;       // Max Operaciones Diarias
+
+input group "=== FILTROS DE SEGURIDAD Y SESION (V12.2) ==="
+input int      InpCooldownBars      = 2;     // Velas de espera tras cerrar trade (Cooldown anti-sobreoperación)
+input bool     InpUseSessionFilter  = true;  // Habilitar Filtro de Sesión Horaria (Londres / NY)
+input int      InpStartHour         = 7;     // Hora inicio UTC (Sesión Londres)
+input int      InpEndHour           = 17;    // Hora fin UTC (Sesión NY)
+input bool     InpUseATRBreakEven   = true;  // Usar BreakEven Dinámico basado en ATR
+input double   InpBE_ATR_Mult       = 1.0;   // Multiplicador ATR para activación de BreakEven
 
 input group "=== FILTRO MULTITEMPORALIDAD (MTF) ==="
 input bool            InpUseMTFFilter     = true;       // Habilitar Filtro MTF (H4 + H1)
@@ -83,7 +94,11 @@ void AutoTuneAssets() {
       StringToUpper(symbol);
       if(StringFind(symbol, "XAU") >= 0 || StringFind(symbol, "GOLD") >= 0) {
          g_gold_mode_active = true;
-         g_lot_size = 0.01;            // Reducir riesgo para cuenta pequeña ($200 equidad)
+         if(!InpUseAutoRiskPercent && InpLotSize > 0.01) {
+            g_lot_size = InpLotSize;
+         } else {
+            g_lot_size = 0.01;            // Lote base inicial para Oro si % dinámico está desactivado
+         }
          g_max_spread = 75;            // Spreads normales de Oro (hasta 7.5 pips / 75 ptos)
          g_distancia_puntos = 800;     // Ampliado para flexibilidad H1/EMA ($8.00 USD)
          g_be_trigger = 550;           // Mover SL a BE tras $5.50 USD de ganancia (evita cortar ganancias prematuras)
@@ -173,6 +188,22 @@ int OnInit() {
    
    if(hMA==INVALID_HANDLE || hMA_HTF==INVALID_HANDLE || hRSI==INVALID_HANDLE || hADX==INVALID_HANDLE) return(INIT_FAILED);
    
+   // Verificación de Permisos de Trading Algorítmico y Símbolo Activo
+   long sym_trade_mode = SymbolInfoInteger(_Symbol, SYMBOL_TRADE_MODE);
+   if(sym_trade_mode == SYMBOL_TRADE_MODE_DISABLED) {
+      Print("⚠️ [ALERTA CRÍTICA SÍMBOLO] El símbolo '", _Symbol, "' está DESHABILITADO para trading en esta cuenta.");
+      Print("👉 En cuentas Micro de XM, abre el gráfico con sufijo 'micro' (ej: EURUSDmicro, GBPUSDmicro, USDJPYmicro) y coloca el EA allí.");
+   }
+   if(!TerminalInfoInteger(TERMINAL_TRADE_ALLOWED)) {
+      Print("⚠️ [ALERTA CRÍTICA] El botón 'Algo Trading' en la barra superior de MT5 está DESACTIVADO.");
+   }
+   if(!MQLInfoInteger(MQL_TRADE_ALLOWED)) {
+      Print("⚠️ [ALERTA CRÍTICA] La casilla 'Permitir trading algorítmico' no está marcada en las propiedades del EA (F7).");
+   }
+   if(!AccountInfoInteger(ACCOUNT_TRADE_ALLOWED) || !AccountInfoInteger(ACCOUNT_TRADE_EXPERT)) {
+      Print("⚠️ [ALERTA CRÍTICA] Trading automático deshabilitado en esta cuenta por el bróker o clave Inversor en uso.");
+   }
+
    EventSetTimer(1); // Dashboard Timer
    Print("🦅 AURUM V12 ULTIMATE: Sniper Engine + MTF Guard Loaded.");
    return(INIT_SUCCEEDED);
@@ -185,9 +216,85 @@ void OnDeinit(const int reason) {
 }
 
 //+------------------------------------------------------------------+
+//| FILTROS AUXILIARES V12.2                                         |
+//+------------------------------------------------------------------+
+double CalculateLotSize(double sl_dist_price) {
+   if(!InpUseAutoRiskPercent) return g_lot_size;
+   
+   double equity = AccountInfoDouble(ACCOUNT_EQUITY);
+   if(equity <= 0) return g_lot_size;
+   
+   double risk_amount = equity * (InpRiskPercent / 100.0);
+   double tick_size = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_SIZE);
+   double tick_value = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_VALUE);
+   
+   if(tick_size <= 0 || tick_value <= 0 || sl_dist_price <= 0) return g_lot_size;
+   
+   double loss_per_lot = (sl_dist_price / tick_size) * tick_value;
+   if(loss_per_lot <= 0) return g_lot_size;
+   
+   double raw_lot = risk_amount / loss_per_lot;
+   
+   double min_vol  = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN);
+   double max_vol  = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MAX);
+   double step_vol = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_STEP);
+   
+   if(step_vol > 0) {
+      raw_lot = MathFloor((raw_lot - min_vol) / step_vol + 0.000001) * step_vol + min_vol;
+   }
+   raw_lot = MathMax(min_vol, MathMin(max_vol, raw_lot));
+   return NormalizeDouble(raw_lot, 2);
+}
+
+bool IsTradingSession() {
+   if(!InpUseSessionFilter) return true;
+   MqlDateTime dt;
+   TimeCurrent(dt);
+   if(InpStartHour <= InpEndHour) {
+      if(dt.hour < InpStartHour || dt.hour >= InpEndHour) return false;
+   } else {
+      if(dt.hour < InpStartHour && dt.hour >= InpEndHour) return false;
+   }
+   return true;
+}
+
+datetime GetLastTradeCloseTime() {
+   datetime last_close = 0;
+   if(HistorySelect(TimeCurrent() - 86400, TimeCurrent())) {
+      int total_deals = HistoryDealsTotal();
+      for(int i = total_deals - 1; i >= 0; i--) {
+         ulong deal_ticket = HistoryDealGetTicket(i);
+         if(deal_ticket <= 0) continue;
+         if(HistoryDealGetString(deal_ticket, DEAL_SYMBOL) == _Symbol) {
+            long magic = HistoryDealGetInteger(deal_ticket, DEAL_MAGIC);
+            long entry_type = HistoryDealGetInteger(deal_ticket, DEAL_ENTRY);
+            if((magic == MAGIC_NUMBER || InpManageManualTrades) && (entry_type == DEAL_ENTRY_OUT || entry_type == DEAL_ENTRY_INOUT)) {
+               datetime close_time = (datetime)HistoryDealGetInteger(deal_ticket, DEAL_TIME);
+               if(close_time > last_close) {
+                  last_close = close_time;
+               }
+            }
+         }
+      }
+   }
+   return last_close;
+}
+
+bool CheckCooldownPass() {
+   if(InpCooldownBars <= 0) return true;
+   datetime last_close = GetLastTradeCloseTime();
+   if(last_close == 0) return true;
+   int cooldown_seconds = InpCooldownBars * PeriodSeconds(_Period);
+   if(TimeCurrent() - last_close < cooldown_seconds) {
+      return false;
+   }
+   return true;
+}
+
+//+------------------------------------------------------------------+
 //| X-RAY DEBUG MODE                                                 |
 //+------------------------------------------------------------------+
-void DebugSignalMiss(string direction, bool trend, bool in_zone, double rsi, double adx, bool is_spike, bool has_open_trade, bool good_spread, bool daily_limit, double eff_rsi_oversold, double eff_rsi_overbought) {
+void DebugSignalMiss(string direction, bool trend, bool in_zone, double rsi, double adx, bool is_spike, bool has_open_trade, bool good_spread, bool daily_limit, double eff_rsi_oversold, double eff_rsi_overbought, bool cooldown_ok, bool session_ok) {
     if(!in_zone) return; // Solo nos importa si el precio llegó a la zona
     
     double open1 = iOpen(_Symbol, _Period, 1);
@@ -203,6 +310,8 @@ void DebugSignalMiss(string direction, bool trend, bool in_zone, double rsi, dou
         if(!good_spread) reason += "[Spread alto: " + IntegerToString(current_spread) + " ptos] ";
         if(daily_limit) reason += "[Meta Diaria alcanzada] ";
         if(has_open_trade) reason += "[Trade abierto] ";
+        if(!cooldown_ok) reason += "[Cooldown activo] ";
+        if(!session_ok) reason += "[Fuera de Sesion] ";
         
         if(reason != "") Print("🔍 [X-RAY COMPRA OMITIDA] ", _Symbol, ": ", reason);
     }
@@ -216,6 +325,8 @@ void DebugSignalMiss(string direction, bool trend, bool in_zone, double rsi, dou
         if(!good_spread) reason += "[Spread alto: " + IntegerToString(current_spread) + " ptos] ";
         if(daily_limit) reason += "[Meta Diaria alcanzada] ";
         if(has_open_trade) reason += "[Trade abierto] ";
+        if(!cooldown_ok) reason += "[Cooldown activo] ";
+        if(!session_ok) reason += "[Fuera de Sesion] ";
         
         if(reason != "") Print("🔍 [X-RAY VENTA OMITIDA] ", _Symbol, ": ", reason);
     }
@@ -278,6 +389,8 @@ void OnTick() {
    bool has_open_trade = IsPositionOpenOnSymbol();
    bool good_spread = CheckSpread();
    bool daily_limit_reached = (g_daily_trades >= InpMaxDailyTrades);
+   bool cooldown_ok = CheckCooldownPass();
+   bool session_ok = IsTradingSession();
    
    if(daily_limit_reached) {
        Comment("\n😴 META DIARIA ALCANZADA (" + IntegerToString(g_daily_trades) + "/" + IntegerToString(InpMaxDailyTrades) + "). HASTA MAÑANA.");
@@ -291,11 +404,33 @@ void OnTick() {
    if(in_zone_sell) is_spike_sell = IsMomentumSpike("SELL");
    
    // --- MODO X-RAY (DEBUG V12) ---
-   DebugSignalMiss("BUY", trend_bull, in_zone_buy, rsi, adx, is_spike_buy, has_open_trade, good_spread, daily_limit_reached, eff_rsi_oversold, eff_rsi_overbought);
-   DebugSignalMiss("SELL", trend_bear, in_zone_sell, rsi, adx, is_spike_sell, has_open_trade, good_spread, daily_limit_reached, eff_rsi_oversold, eff_rsi_overbought);
+   DebugSignalMiss("BUY", trend_bull, in_zone_buy, rsi, adx, is_spike_buy, has_open_trade, good_spread, daily_limit_reached, eff_rsi_oversold, eff_rsi_overbought, cooldown_ok, session_ok);
+   DebugSignalMiss("SELL", trend_bear, in_zone_sell, rsi, adx, is_spike_sell, has_open_trade, good_spread, daily_limit_reached, eff_rsi_oversold, eff_rsi_overbought, cooldown_ok, session_ok);
    
-   // Si no se puede operar por reglas globales, salir
-   if(has_open_trade || !good_spread || daily_limit_reached) return;
+    // Si no se puede operar por reglas globales, salir
+    if(has_open_trade || !good_spread || daily_limit_reached || !cooldown_ok || !session_ok) return;
+
+    // Verificar si el símbolo está habilitado para trading en este tipo de cuenta
+    long sym_trade_mode = SymbolInfoInteger(_Symbol, SYMBOL_TRADE_MODE);
+    if(sym_trade_mode == SYMBOL_TRADE_MODE_DISABLED) {
+       static datetime last_sym_warn = 0;
+       if(TimeCurrent() - last_sym_warn >= 300) {
+          Print("🛑 [SÍMBOLO BLOQUEADO] El símbolo '", _Symbol, "' es solo lectura en esta cuenta. Abre el gráfico con sufijo 'micro' (ej. ", _Symbol, "micro).");
+          last_sym_warn = TimeCurrent();
+       }
+       return;
+    }
+
+    // Verificar permisos de trading algorítmico en MT5 antes de enviar órdenes
+    bool algo_allowed = TerminalInfoInteger(TERMINAL_TRADE_ALLOWED) && MQLInfoInteger(MQL_TRADE_ALLOWED) && AccountInfoInteger(ACCOUNT_TRADE_ALLOWED) && AccountInfoInteger(ACCOUNT_TRADE_EXPERT);
+    if(!algo_allowed) {
+       static datetime last_warn = 0;
+       if(TimeCurrent() - last_warn >= 300) {
+          Print("🛑 [TRADING BLOQUEADO] Intento de orden cancelado porque 'Algo Trading' está desactivado en MT5 o en las propiedades del EA (F7).");
+          last_warn = TimeCurrent();
+       }
+       return;
+    }
 
    // COMPRA V12: Tendencia Alcista + Zona Adaptativa ATR + RSI + ADX
     if(trend_bull && in_zone_buy && rsi < eff_rsi_oversold && adx > g_adx_threshold && !is_spike_buy) {
@@ -308,8 +443,11 @@ void OnTick() {
         // Validar distancia minima del broker (SL y TP)
         CheckStops(sl, tp, true); 
         
-        if(trade.Buy(g_lot_size, _Symbol, ask, sl, tp, "Aurum V12 Sniper")) {
+        double trade_lot = CalculateLotSize(sl_dist);
+        
+        if(trade.Buy(trade_lot, _Symbol, ask, sl, tp, "Aurum V12 Sniper")) {
             g_daily_trades++; // Sumar contador
+            Print("📊 [COMPRA EJECUTADA] Lote: ", DoubleToString(trade_lot, 2), " | SL: ", DoubleToString(sl, _Digits), " | Risk %: ", DoubleToString(InpRiskPercent, 1));
         }
     }
 
@@ -323,8 +461,11 @@ void OnTick() {
         
         CheckStops(sl, tp, false);
         
-        if(trade.Sell(g_lot_size, _Symbol, bid, sl, tp, "Aurum V12 Sniper")) {
+        double trade_lot = CalculateLotSize(sl_dist);
+        
+        if(trade.Sell(trade_lot, _Symbol, bid, sl, tp, "Aurum V12 Sniper")) {
             g_daily_trades++; // Sumar contador
+            Print("📊 [VENTA EJECUTADA] Lote: ", DoubleToString(trade_lot, 2), " | SL: ", DoubleToString(sl, _Digits), " | Risk %: ", DoubleToString(InpRiskPercent, 1));
         }
     }
 }
@@ -368,7 +509,7 @@ bool IsInZone(string type, double ma_ref, double adx_val) {
 void GestionarPosicionesPro() {
    for(int i=PositionsTotal()-1; i>=0; i--) {
       ulong ticket = PositionGetTicket(i);
-      if(!PositionSelectByTicket(ticket)) continue;
+      if(ticket <= 0 || !PositionSelectByTicket(ticket)) continue;
       
       long pos_magic = PositionGetInteger(POSITION_MAGIC);
       // Si la posición no es del bot y InpManageManualTrades está desactivado, saltar
@@ -388,10 +529,48 @@ void GestionarPosicionesPro() {
       if (type == POSITION_TYPE_BUY) profit_puntos = (cur_price - entry) / _Point;
       if (type == POSITION_TYPE_SELL) profit_puntos = (entry - cur_price) / _Point;
       
+      // 0. Auto-Asignación de SL/TP Inicial para Operaciones sin Protección (ej: entradas manuales)
+      if(InpAutoSetManualSLTP && (sl == 0 || tp == 0)) {
+          double atr_val = (hATR != INVALID_HANDLE) ? GetBufferVal(hATR, 0) : 0;
+          double sl_dist = (atr_val > 0) ? (atr_val * g_atr_multiplier) : (g_distancia_puntos * _Point * 2.0);
+          double tp_dist = sl_dist * g_risk_reward;
+          
+          double new_sl = sl;
+          double new_tp = tp;
+          
+          if(type == POSITION_TYPE_BUY) {
+              if(new_sl == 0) new_sl = NormalizeDouble(entry - sl_dist, _Digits);
+              if(new_tp == 0) new_tp = NormalizeDouble(entry + tp_dist, _Digits);
+              CheckStops(new_sl, new_tp, true);
+          }
+          else if(type == POSITION_TYPE_SELL) {
+              if(new_sl == 0) new_sl = NormalizeDouble(entry + sl_dist, _Digits);
+              if(new_tp == 0) new_tp = NormalizeDouble(entry - tp_dist, _Digits);
+              CheckStops(new_sl, new_tp, false);
+          }
+          
+          if(ticket > 0 && PositionSelectByTicket(ticket)) {
+              if(trade.PositionModify(ticket, new_sl, new_tp)) {
+                  sl = new_sl;
+                  tp = new_tp;
+                  Print("🛡️ AUTO-PROTECCIÓN MANUAL (Ticket ", ticket, "): SL/TP asignados automáticamente. SL: ", DoubleToString(new_sl, _Digits), " | TP: ", DoubleToString(new_tp, _Digits));
+              }
+          }
+      }
+      
       double lock_dist = InpBE_LockPips * _Point;
       
+      double effective_be_trigger = (double)g_be_trigger;
+      if(InpUseATRBreakEven && hATR != INVALID_HANDLE) {
+          double atr_val = GetBufferVal(hATR, 0);
+          if(atr_val > 0) {
+              double atr_be_pts = (atr_val * InpBE_ATR_Mult) / _Point;
+              effective_be_trigger = MathMax(atr_be_pts, (double)InpBE_LockPips * 2.0);
+          }
+      }
+      
       // 1. BreakEven / Cobertura de Ganancia (Operaciones de Bot y Manuales)
-      if(profit_puntos >= g_be_trigger) {
+      if(profit_puntos >= effective_be_trigger) {
           double target_sl = (type == POSITION_TYPE_BUY) ? (entry + lock_dist) : (entry - lock_dist);
           target_sl = NormalizeDouble(target_sl, _Digits);
           
@@ -405,32 +584,40 @@ void GestionarPosicionesPro() {
                  double partial = MathFloor(half_vol / step_vol) * step_vol;
                  
                  if (partial >= min_vol && (vol - partial) >= min_vol) {
-                     trade.PositionClosePartial(ticket, partial);
-                     Print("🛡️ SHIELD: Parcial Cerrado (Vol: ", DoubleToString(partial, 2), ").");
+                     if(ticket > 0 && PositionSelectByTicket(ticket)) {
+                         trade.PositionClosePartial(ticket, partial);
+                         Print("🛡️ SHIELD: Parcial Cerrado (Vol: ", DoubleToString(partial, 2), ").");
+                     }
                  }
              }
              
              // Mueve SL al precio de entrada + puntos de cobertura asegurada
-             trade.PositionModify(ticket, target_sl, tp);
-             Print("🛡️ COBERTURA DE GANANCIA ACTIVADA (Ticket ", ticket, "): SL movido a ", DoubleToString(target_sl, _Digits));
+             if(ticket > 0 && PositionSelectByTicket(ticket)) {
+                 trade.PositionModify(ticket, target_sl, tp);
+                 Print("🛡️ COBERTURA DE GANANCIA ACTIVADA (Ticket ", ticket, "): SL movido a ", DoubleToString(target_sl, _Digits));
+             }
           }
       }
       
       // 2. Trailing Stop Dinámico (Sigue la ganancia paso a paso para proteger utilidades)
-      if(InpUseTrailingStop && profit_puntos > (g_be_trigger + InpTrailingStep)) {
-          double trail_dist = g_be_trigger * _Point;
+      if(InpUseTrailingStop && profit_puntos > (effective_be_trigger + InpTrailingStep)) {
+          double trail_dist = effective_be_trigger * _Point;
           if(type == POSITION_TYPE_BUY) {
               double new_sl = NormalizeDouble(cur_price - trail_dist, _Digits);
               if(new_sl > sl + (InpTrailingStep * _Point)) {
-                  trade.PositionModify(ticket, new_sl, tp);
-                  Print("📈 TRAILING STOP (BUY Ticket ", ticket, "): Nuevo SL en ", DoubleToString(new_sl, _Digits));
+                  if(ticket > 0 && PositionSelectByTicket(ticket)) {
+                      trade.PositionModify(ticket, new_sl, tp);
+                      Print("📈 TRAILING STOP (BUY Ticket ", ticket, "): Nuevo SL en ", DoubleToString(new_sl, _Digits));
+                  }
               }
           }
           else if(type == POSITION_TYPE_SELL) {
               double new_sl = NormalizeDouble(cur_price + trail_dist, _Digits);
               if(sl == 0 || new_sl < sl - (InpTrailingStep * _Point)) {
-                  trade.PositionModify(ticket, new_sl, tp);
-                  Print("📉 TRAILING STOP (SELL Ticket ", ticket, "): Nuevo SL en ", DoubleToString(new_sl, _Digits));
+                  if(ticket > 0 && PositionSelectByTicket(ticket)) {
+                      trade.PositionModify(ticket, new_sl, tp);
+                      Print("📉 TRAILING STOP (SELL Ticket ", ticket, "): Nuevo SL en ", DoubleToString(new_sl, _Digits));
+                  }
               }
           }
       }
@@ -514,8 +701,10 @@ double GetBufferVal(int h, int idx) {
 
 // Validar Stops Minimos del Broker (SL y TP)
 void CheckStops(double &sl, double &tp, bool isBuy) {
-   double min_dist = (double)SymbolInfoInteger(_Symbol, SYMBOL_TRADE_STOPS_LEVEL) * _Point;
-   if(min_dist <= 0) min_dist = 10 * _Point; // Garantizar margen de seguridad si StopsLevel es 0
+   long stops_level = SymbolInfoInteger(_Symbol, SYMBOL_TRADE_STOPS_LEVEL);
+   long spread = SymbolInfoInteger(_Symbol, SYMBOL_SPREAD);
+   double min_dist = (double)(stops_level + spread + 10) * _Point;
+   if(min_dist < 20 * _Point) min_dist = 20 * _Point; // Garantizar margen de seguridad de al menos 20 puntos
    double price = isBuy ? SymbolInfoDouble(_Symbol, SYMBOL_ASK) : SymbolInfoDouble(_Symbol, SYMBOL_BID);
    
    if(isBuy) {
@@ -538,7 +727,15 @@ void UpdateDashboard() {
    
    int y_offset = 20;
    DrawLabel("lbl_Title", "🦅 AURUM SNIPER V12 (ULTIMATE)", 20, y_offset, clrGold, 12);
-   y_offset += 25;
+   y_offset += 22;
+
+   long sym_trade_mode = SymbolInfoInteger(_Symbol, SYMBOL_TRADE_MODE);
+   bool sym_enabled = (sym_trade_mode != SYMBOL_TRADE_MODE_DISABLED);
+   bool algo_allowed = sym_enabled && TerminalInfoInteger(TERMINAL_TRADE_ALLOWED) && MQLInfoInteger(MQL_TRADE_ALLOWED) && AccountInfoInteger(ACCOUNT_TRADE_ALLOWED) && AccountInfoInteger(ACCOUNT_TRADE_EXPERT);
+   string trade_status_txt = !sym_enabled ? ("Estado Trading: 🛑 SÍMBOLO BLOQUEADO (Usar " + _Symbol + "micro)") : (algo_allowed ? "Estado Trading: ✅ PERMITIDO Y OPERATIVO" : "Estado Trading: 🛑 DESACTIVADO (Revisar Algo Trading / F7)");
+   color trade_status_clr = algo_allowed ? clrLime : clrRed;
+   DrawLabel("lbl_TradeStatus", trade_status_txt, 20, y_offset, trade_status_clr, 10);
+   y_offset += 20;
    
    if(g_gold_mode_active) {
       DrawLabel("lbl_AssetMode", "MODO ORO: ACTIVO 🦅", 20, y_offset, clrOrange, 10);
