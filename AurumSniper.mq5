@@ -1,9 +1,14 @@
 //+------------------------------------------------------------------+
 //|                                           AurumSniper_V12.mq5   |
 //|                    Copyright 2026, Aurum Capital                 |
-//|                    V12.3 - Optimizacion y Correccion de Bugs     |
+//|         V12.5 - Gestión Escalonada por Fases R-Múltiples        |
 //+------------------------------------------------------------------+
-// CHANGELOG V12.3:
+// CHANGELOG V12.5:
+//  [V12.5] GESTIÓN ESCALONADA POR FASES (Step / Milestone Trailing):
+//          - Fase 1 (1R / BE Trigger): Mueve SL a Entrada (BE) y lo mantiene firme.
+//          - Fase 2 (2R Alcanzado): Mueve SL a asegurar +1R garantizado.
+//          - Fase 3 (3R Alcanzado): Mueve SL a asegurar +2R y Runner con 1R de holgura.
+//          - Elimina la asfixia prematura por micro-trailing continuos.
 //  [FIX #1] IsPositionOpenOnSymbol respeta InpManageManualTrades.
 //  [FIX #2] Cierre Parcial con flag por ticket (g_partial_closed_tickets[]).
 //  [OPT #3] UpdateIndicatorCache() hace CopyBuffer 1 vez por barra.
@@ -13,16 +18,16 @@
 //  [FIX #7] g_daily_trades se recupera del historial en OnInit.
 //+------------------------------------------------------------------+
 #property copyright "Aurum Capital"
-#property version   "12.30"
+#property version   "12.50"
 #property strict
 
 #include <Trade\Trade.mqh>
 
 // ==================== INPUTS ====================
-input group "=== GESTION DE RIESGO AVANZADA (V12.3) ==="
+input group "=== GESTION DE RIESGO AVANZADA (V12.5) ==="
 input double   InpLotSize            = 0.01;
 input bool     InpUseAutoRiskPercent = true;
-input double   InpRiskPercent        = 1.0; // [V12.4] Arriesga exactamente el 1.0% del capital ($1.56 USD para $156)
+input double   InpRiskPercent        = 1.0; // Arriesga exactamente el 1.0% del capital
 input double   InpMaxDailyLoss       = 3.0;
 input bool     InpAutoDailyReset     = true;
 
@@ -38,20 +43,28 @@ input int      InpRSIOverbought      = 60;
 input int      InpRSIOversold        = 42;
 input int      InpADXThreshold       = 15;
 
-input group "=== GESTION DE SALIDA PRO Y COBERTURA ==="
+input group "=== GESTION DE SALIDA ESCALONADA POR FASES (V12.5) ==="
 input double   InpATRMultiplier      = 2.0;
 input bool     InpUsePartials        = true;
-input double   InpRiskReward         = 3.0; // [V12.4] Ratio Riesgo:Beneficio Inicial (1:3)
+input double   InpRiskReward         = 3.0; // Ratio Riesgo:Beneficio Inicial (1:3)
 input int      InpBE_Trigger         = 100;
 input int      InpBE_LockPips        = 10;
 input bool     InpManageManualTrades = true;
-input bool     InpBlockAutoWhenManualOpen = false; // [V12.4] Bloquear auto si hay manual (false = permite operar al bot)
+input bool     InpBlockAutoWhenManualOpen = false; // Bloquear auto si hay manual (false = bot opera independiente)
 input bool     InpAutoSetManualSLTP  = true;
-input bool     InpUseTrailingStop    = true;
+
+input bool     InpUseStepTrailing    = true; // [V12.5] Habilitar Fases (BE -> +1R -> +2R -> Runner)
+input double   InpStep1_TriggerR     = 1.0;  // [V12.5] Fase 1: Activar Break-Even al alcanzar (+1R)
+input double   InpStep2_TriggerR     = 2.0;  // [V12.5] Fase 2: Al tocar (+2R), bloquear Step2_LockR
+input double   InpStep2_LockR        = 1.0;  // [V12.5] Fase 2: Ganancia bloqueada (+1R)
+input double   InpStep3_TriggerR     = 3.0;  // [V12.5] Fase 3: Al tocar (+3R), bloquear Step3_LockR
+input double   InpStep3_LockR        = 2.0;  // [V12.5] Fase 3: Ganancia bloqueada (+2R)
+input bool     InpStepRunnerAbove3R  = true; // [V12.5] Por encima de 3R: Runner con 1R de holgura
+
+input bool     InpUseTrailingStop    = false; // Trailing Stop continuo clásico (false si se usan Fases)
 input bool     InpUseATRTrailing     = true;
 input double   InpTrailingATRMult    = 1.5;
-input bool     InpUseRunnerTrailing  = true; // [V12.4] Runner 1:3 (Asegura +2R al tocar 3R y persigue con 1R de holgura)
-input int      InpTrailingStep       = 50;
+input int      InpTrailingStep       = 20;
 input int      InpMaxDailyTrades     = 16;
 input bool     InpUseLiquidityTraps  = true;
 
@@ -511,13 +524,14 @@ void GestionarPosicionesPro() {
       long   type      = PositionGetInteger(POSITION_TYPE);
       double cur_price = PositionGetDouble(POSITION_PRICE_CURRENT);
 
-      double profit_puntos = 0;
-      if(type == POSITION_TYPE_BUY)  profit_puntos = (cur_price - entry) / _Point;
-      if(type == POSITION_TYPE_SELL) profit_puntos = (entry - cur_price) / _Point;
+      double profit_price = (type == POSITION_TYPE_BUY) ? (cur_price - entry) : (entry - cur_price);
+      double profit_puntos = profit_price / _Point;
 
+      // Auto SL/TP si se abrió manual sin ellos
       if(InpAutoSetManualSLTP && (sl == 0 || tp == 0)) {
          double atr_val = (hATR != INVALID_HANDLE && g_atr_0_cache > 0) ? g_atr_0_cache : 0;
          double sl_dist = (atr_val > 0) ? (atr_val * g_atr_multiplier) : (g_distancia_puntos * _Point * 2.0);
+         if(g_min_sl_price > 0 && sl_dist < g_min_sl_price) sl_dist = g_min_sl_price;
          double tp_dist = sl_dist * g_risk_reward;
          double new_sl = sl; double new_tp = tp;
          if(type == POSITION_TYPE_BUY) {
@@ -537,22 +551,56 @@ void GestionarPosicionesPro() {
          }
       }
 
+      // Distancia base 1R para cálculos
+      double atr_val_now = (hATR != INVALID_HANDLE && g_atr_0_cache > 0) ? g_atr_0_cache : 0;
+      double r_dist = (atr_val_now > 0) ? (atr_val_now * g_atr_multiplier) : (g_distancia_puntos * _Point * 2.0);
+      if(g_min_sl_price > 0 && r_dist < g_min_sl_price) r_dist = g_min_sl_price;
+      double profit_R = (r_dist > 0) ? (profit_price / r_dist) : 0;
+
       double lock_dist = InpBE_LockPips * _Point;
       double effective_be_trigger = (double)g_be_trigger;
-      if(InpUseATRBreakEven && hATR != INVALID_HANDLE) {
-         double atr_val = g_atr_0_cache;
-         if(atr_val > 0) {
-            double atr_be_pts = (atr_val * InpBE_ATR_Mult) / _Point;
-            effective_be_trigger = MathMax(atr_be_pts, (double)InpBE_LockPips * 2.0);
-         }
+      if(InpUseATRBreakEven && atr_val_now > 0) {
+         double atr_be_pts = (atr_val_now * InpBE_ATR_Mult) / _Point;
+         effective_be_trigger = MathMax(atr_be_pts, (double)InpBE_LockPips * 2.0);
       }
 
-      if(profit_puntos >= effective_be_trigger) {
-         double target_sl = (type == POSITION_TYPE_BUY) ? (entry + lock_dist) : (entry - lock_dist);
-         target_sl = NormalizeDouble(target_sl, _Digits);
-         bool is_risky = (type == POSITION_TYPE_BUY) ? (sl < target_sl) : (sl == 0 || sl > target_sl);
-         if(is_risky) {
-            // [FIX #2] Solo si no se hizo cierre parcial ya
+      // ================================================================
+      // NUEVA GESTIÓN ESCALONADA POR FASES (V12.5)
+      // ================================================================
+      if(InpUseStepTrailing) {
+         double target_sl = 0;
+         string phase_name = "";
+
+         // FASE 3: 3R Alcanzado (Bloquea +2R y Runner con 1R holgura)
+         if(profit_R >= InpStep3_TriggerR) {
+            double locked_dist = InpStep3_LockR * r_dist;
+            if(type == POSITION_TYPE_BUY) {
+               target_sl = entry + locked_dist;
+               if(InpStepRunnerAbove3R) {
+                  double runner_sl = cur_price - r_dist; // 1R de holgura
+                  if(runner_sl > target_sl) target_sl = runner_sl;
+               }
+            } else {
+               target_sl = entry - locked_dist;
+               if(InpStepRunnerAbove3R) {
+                  double runner_sl = cur_price + r_dist; // 1R de holgura
+                  if(runner_sl < target_sl) target_sl = runner_sl;
+               }
+            }
+            phase_name = "FASE 3 (3R+ -> SL a +2R / Runner)";
+         }
+         // FASE 2: 2R Alcanzado (Bloquea +1R firme)
+         else if(profit_R >= InpStep2_TriggerR) {
+            double locked_dist = InpStep2_LockR * r_dist;
+            target_sl = (type == POSITION_TYPE_BUY) ? (entry + locked_dist) : (entry - locked_dist);
+            phase_name = "FASE 2 (2R -> SL a +1R Asegurado)";
+         }
+         // FASE 1: 1R o Trigger BE Alcanzado (SL a Break-Even + lock pips)
+         else if(profit_R >= InpStep1_TriggerR || profit_puntos >= effective_be_trigger) {
+            target_sl = (type == POSITION_TYPE_BUY) ? (entry + lock_dist) : (entry - lock_dist);
+            phase_name = "FASE 1 (1R/BE -> SL a Entrada Protegida)";
+
+            // Cierre parcial en Fase 1 si está habilitado
             if(InpUsePartials && pos_magic == MAGIC_NUMBER && !IsPartialAlreadyClosed(ticket)) {
                double min_vol  = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN);
                double step_vol = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_STEP);
@@ -569,53 +617,74 @@ void GestionarPosicionesPro() {
                   MarkPartialClosed(ticket);
                }
             }
-            if(ticket > 0 && PositionSelectByTicket(ticket)) {
-               trade.PositionModify(ticket, target_sl, tp);
-               Print("[COBERTURA BE Ticket ",ticket,"] SL->",DoubleToString(target_sl,_Digits));
-            }
          }
-      }
 
-      // --- FASE 2 Y 3: GESTIÓN ASIMÉTRICA 1:3 + RUNNER CON 1R DE HOLGURA ---
-      double atr_val_now = (hATR != INVALID_HANDLE && g_atr_0_cache > 0) ? g_atr_0_cache : 0;
-      double r_dist = (atr_val_now > 0) ? (atr_val_now * g_atr_multiplier) : (g_distancia_puntos * _Point * 2.0);
-      if(g_min_sl_price > 0 && r_dist < g_min_sl_price) r_dist = g_min_sl_price;
-      double profit_price = (type == POSITION_TYPE_BUY) ? (cur_price - entry) : (entry - cur_price);
+         if(target_sl > 0) {
+            target_sl = NormalizeDouble(target_sl, _Digits);
+            bool need_modify = false;
+            if(type == POSITION_TYPE_BUY  && (sl == 0 || target_sl > sl + (2 * _Point))) need_modify = true;
+            if(type == POSITION_TYPE_SELL && (sl == 0 || target_sl < sl - (2 * _Point))) need_modify = true;
 
-      if(InpUseRunnerTrailing && profit_price >= (3.0 * r_dist)) {
-         // Alcanzó 3R: Asegura +2R y deja 1R de holgura persiguiendo el precio
-         double locked_2r_dist = 2.0 * r_dist;
-         double runner_sl = (type == POSITION_TYPE_BUY) ? (cur_price - r_dist) : (cur_price + r_dist);
-         double target_runner = (type == POSITION_TYPE_BUY)
-                                ? MathMax(entry + locked_2r_dist, runner_sl)
-                                : MathMin(entry - locked_2r_dist, runner_sl);
-         target_runner = NormalizeDouble(target_runner, _Digits);
-
-         bool need_modify = false;
-         if(type == POSITION_TYPE_BUY  && target_runner > sl + (InpTrailingStep * _Point)) need_modify = true;
-         if(type == POSITION_TYPE_SELL && (sl == 0 || target_runner < sl - (InpTrailingStep * _Point))) need_modify = true;
-
-         if(need_modify && ticket > 0 && PositionSelectByTicket(ticket)) {
-            trade.PositionModify(ticket, target_runner, 0); // tp=0 para dejar correr el runner indefinidamente
-            Print("[RUNNER 1:3 (+2R Lock + 1R Trail) Ticket ",ticket,"] SL->",DoubleToString(target_runner,_Digits)," (Profit actual: ",DoubleToString(profit_price/r_dist,2),"R)");
-         }
-      }
-      else if(InpUseTrailingStop && profit_puntos > (effective_be_trigger + InpTrailingStep)) {
-         double trail_dist = (InpUseATRTrailing && atr_val_now > 0) ? (atr_val_now * InpTrailingATRMult) : (effective_be_trigger * _Point);
-         if(type == POSITION_TYPE_BUY) {
-            double new_sl = NormalizeDouble(cur_price - trail_dist, _Digits);
-            if(new_sl > sl + (InpTrailingStep * _Point)) {
-               if(ticket > 0 && PositionSelectByTicket(ticket)) {
-                  trade.PositionModify(ticket, new_sl, tp);
-                  Print("[TRAILING BUY ",ticket,"] SL->",DoubleToString(new_sl,_Digits));
+            if(need_modify && ticket > 0 && PositionSelectByTicket(ticket)) {
+               double modify_tp = tp;
+               // Si estamos en Runner Fase 3 y supera 3R, expandimos o dejamos correr sin TP rígido
+               if(InpStepRunnerAbove3R && profit_R >= InpStep3_TriggerR && tp > 0) modify_tp = 0;
+               CheckStops(target_sl, modify_tp, (type == POSITION_TYPE_BUY));
+               if(trade.PositionModify(ticket, target_sl, modify_tp)) {
+                  Print("[",phase_name," Ticket ",ticket,"] SL->",DoubleToString(target_sl,_Digits)," (Profit: ",DoubleToString(profit_R,2),"R)");
                }
             }
-         } else if(type == POSITION_TYPE_SELL) {
-            double new_sl = NormalizeDouble(cur_price + trail_dist, _Digits);
-            if(sl == 0 || new_sl < sl - (InpTrailingStep * _Point)) {
+         }
+      }
+      // ================================================================
+      // GESTIÓN CLÁSICA / CONTINUA (Si InpUseStepTrailing = false)
+      // ================================================================
+      else {
+         if(profit_puntos >= effective_be_trigger) {
+            double target_sl = (type == POSITION_TYPE_BUY) ? (entry + lock_dist) : (entry - lock_dist);
+            target_sl = NormalizeDouble(target_sl, _Digits);
+            bool is_risky = (type == POSITION_TYPE_BUY) ? (sl < target_sl) : (sl == 0 || sl > target_sl);
+            if(is_risky) {
+               if(InpUsePartials && pos_magic == MAGIC_NUMBER && !IsPartialAlreadyClosed(ticket)) {
+                  double min_vol  = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN);
+                  double step_vol = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_STEP);
+                  double half_vol = NormalizeDouble(vol / 2.0, 2);
+                  double partial  = (step_vol > 0) ? MathFloor(half_vol / step_vol) * step_vol : half_vol;
+                  if(partial >= min_vol && (vol - partial) >= min_vol) {
+                     if(ticket > 0 && PositionSelectByTicket(ticket)) {
+                        if(trade.PositionClosePartial(ticket, partial)) {
+                           MarkPartialClosed(ticket);
+                           Print("[PARCIAL Ticket ",ticket,"] Vol:",DoubleToString(partial,2));
+                        }
+                     }
+                  } else {
+                     MarkPartialClosed(ticket);
+                  }
+               }
                if(ticket > 0 && PositionSelectByTicket(ticket)) {
-                  trade.PositionModify(ticket, new_sl, tp);
-                  Print("[TRAILING SELL ",ticket,"] SL->",DoubleToString(new_sl,_Digits));
+                  trade.PositionModify(ticket, target_sl, tp);
+                  Print("[COBERTURA BE Ticket ",ticket,"] SL->",DoubleToString(target_sl,_Digits));
+               }
+            }
+         }
+
+         if(InpUseTrailingStop && profit_puntos > (effective_be_trigger + InpTrailingStep)) {
+            double trail_dist = (InpUseATRTrailing && atr_val_now > 0) ? (atr_val_now * InpTrailingATRMult) : (effective_be_trigger * _Point);
+            if(type == POSITION_TYPE_BUY) {
+               double new_sl = NormalizeDouble(cur_price - trail_dist, _Digits);
+               if(new_sl > sl + (InpTrailingStep * _Point)) {
+                  if(ticket > 0 && PositionSelectByTicket(ticket)) {
+                     trade.PositionModify(ticket, new_sl, tp);
+                     Print("[TRAILING BUY ",ticket,"] SL->",DoubleToString(new_sl,_Digits));
+                  }
+               }
+            } else if(type == POSITION_TYPE_SELL) {
+               double new_sl = NormalizeDouble(cur_price + trail_dist, _Digits);
+               if(sl == 0 || new_sl < sl - (InpTrailingStep * _Point)) {
+                  if(ticket > 0 && PositionSelectByTicket(ticket)) {
+                     trade.PositionModify(ticket, new_sl, tp);
+                     Print("[TRAILING SELL ",ticket,"] SL->",DoubleToString(new_sl,_Digits));
+                  }
                }
             }
          }
@@ -700,7 +769,7 @@ void UpdateDashboard() {
    string trend_txt = (price > ma) ? "ALCISTA (Busca BUY)" : "BAJISTA (Busca SELL)";
    color trend_clr = (price > ma) ? clrLime : clrRed;
    int y = 20;
-   DrawLabel("lbl_Title", "AURUM SNIPER V12.4 (ULTIMATE)", 20, y, clrGold, 12); y += 22;
+   DrawLabel("lbl_Title", "AURUM SNIPER V12.5 (ULTIMATE)", 20, y, clrGold, 12); y += 22;
    long sym_trade_mode = SymbolInfoInteger(_Symbol, SYMBOL_TRADE_MODE);
    bool sym_enabled  = (sym_trade_mode != SYMBOL_TRADE_MODE_DISABLED);
    bool algo_allowed = sym_enabled && TerminalInfoInteger(TERMINAL_TRADE_ALLOWED) &&
@@ -711,6 +780,10 @@ void UpdateDashboard() {
    DrawLabel("lbl_TradeStatus", ts, 20, y, algo_allowed ? clrLime : clrRed, 10); y += 20;
    if(g_gold_mode_active) { DrawLabel("lbl_AssetMode", "MODO ORO: ACTIVO", 20, y, clrOrange, 10); y += 20; }
    else ObjectDelete(0, "lbl_AssetMode");
+   
+   string trail_mode_txt = InpUseStepTrailing ? "FASES R (BE -> +1R -> +2R -> Runner)" : (InpUseTrailingStop ? "TRAILING CONTINUO" : "SOLO BREAK-EVEN");
+   DrawLabel("lbl_TrailMode", "Gestión SL: " + trail_mode_txt, 20, y, InpUseStepTrailing ? clrLime : clrSilver, 10); y += 20;
+
    DrawLabel("lbl_Trend", "Tendencia H1: " + trend_txt, 20, y, trend_clr, 10); y += 20;
    bool htf_bull = (price > ma_htf); bool htf_bear = (price < ma_htf);
    if(InpUseEMAInclinacion) {
