@@ -1,40 +1,39 @@
 //+------------------------------------------------------------------+
 //|                                           AurumSniper_V12.mq5   |
 //|                    Copyright 2026, Aurum Capital                 |
-//|         V12.6 - Precisión Sniper: Descuento/Premium & Cooldown   |
+//|      V12.9 - Precision Risk Engine, Multi-Phase Trailing & Safe BE|
 //+------------------------------------------------------------------+
-// CHANGELOG V12.6:
-//  [V12.6] FILTRO DE ZONA DE DESCUENTO / PREMIUM (SMC / Equilibrium):
-//          - Compras solo permitidas en la mitad inferior (<= 50% de rango H1).
-//          - Ventas solo permitidas en la mitad superior (>= 50% de rango H1).
-//          - Evita compras tardías en la cima o ventas en el fondo del swing.
-//  [V12.6] COOLDOWN INTELIGENTE:
-//          - Si el trade anterior cerró en Ganancia/BE, cooldown se reduce a 1 vela.
-//          - Si cerró en Pérdida, mantiene cooldown completo anti-revenge trading.
-//  [V12.6] RE-ENTRADA EN POSICIONES PROTEGIDAS (Risk-Free Add-on):
-//          - Permite 2da entrada si la posición abierta ya tiene SL en BE / Ganancia.
+// CHANGELOG V12.9:
+//  [V12.9] MOTOR DE RIESGO DE ALTA PRECISIÓN:
+//          - Integración de OrderCalcProfit() nativo de MT5 para cálculo monetario exacto de lotaje.
+//          - Compatible al 100% con cuentas Standard, Micro, Cripto, Índices y Probador de Estrategias.
+//          - Diagnóstico de capital y tamaño de contrato en OnInit().
+//  [V12.9] OPTIMIZACIÓN DE BREAK-EVEN Y FASES:
+//          - InpStep1_TriggerR ajustado a 0.8R para permitir oscilación natural de velas M5 sin salidas prematuras.
+//          - Desvinculado el trigger de puntos fijos de la Fase 1 en modo Step Trailing.
+//          - Flexibilización del equilibrio Descuento/Premium hasta 65%/35% en tendencias fuertes (ADX>=30).
 //+------------------------------------------------------------------+
 #property copyright "Aurum Capital"
-#property version   "12.60"
+#property version   "12.90"
 #property strict
 
 #include <Trade\Trade.mqh>
 
 // ==================== INPUTS ====================
-input group "=== GESTION DE RIESGO AVANZADA (V12.6) ==="
+input group "=== GESTION DE RIESGO AVANZADA (V12.9) ==="
 input double   InpLotSize            = 0.01;
 input bool     InpUseAutoRiskPercent = true;
 input double   InpRiskPercent        = 1.0; // Arriesga exactamente el 1.0% del capital
 input double   InpMaxDailyLoss       = 3.0;
 input bool     InpAutoDailyReset     = true;
 
-input group "=== AUTO-TUNING POR ACTIVO (V12.6) ==="
+input group "=== AUTO-TUNING POR ACTIVO (V12.9) ==="
 input bool     InpAutoGoldSettings   = true;
 input bool     InpAutoForexSettings  = true;
 input bool     InpAutoCryptoSettings = true;
 input bool     InpAutoIndexSettings  = true;
 
-input group "=== FILTROS DE ENTRADA Y PRECISIÓN (V12.6) ==="
+input group "=== FILTROS DE ENTRADA Y PRECISIÓN (V12.9) ==="
 input bool     InpUseDiscountPremiumFilter = true; // Exigir Descuento en Compras y Premium en Ventas
 input double   InpEquilibriumPercent       = 50.0; // Nivel de Equilibrio (50% = Mitad de rango H1)
 input bool     InpSmartCooldown            = true; // Cooldown inteligente (1 vela si el trade previo cerró en Profit/BE)
@@ -48,23 +47,23 @@ input int      InpRSIOverbought      = 60;
 input int      InpRSIOversold        = 42;
 input int      InpADXThreshold       = 15;
 
-input group "=== GESTION DE SALIDA ESCALONADA POR FASES (V12.5) ==="
+input group "=== GESTION DE SALIDA ESCALONADA POR FASES (V12.9) ==="
 input double   InpATRMultiplier      = 2.0;
 input bool     InpUsePartials        = true;
 input double   InpRiskReward         = 3.0; // Ratio Riesgo:Beneficio Inicial (1:3)
-input int      InpBE_Trigger         = 100;
+input int      InpBE_Trigger         = 150;
 input int      InpBE_LockPips        = 10;
 input bool     InpManageManualTrades = true;
 input bool     InpBlockAutoWhenManualOpen = false; // Bloquear auto si hay manual (false = bot opera independiente)
 input bool     InpAutoSetManualSLTP  = true;
 
-input bool     InpUseStepTrailing    = true; // [V12.5] Habilitar Fases (BE -> +1R -> +2R -> Runner)
-input double   InpStep1_TriggerR     = 1.0;  // [V12.5] Fase 1: Activar Break-Even al alcanzar (+1R)
-input double   InpStep2_TriggerR     = 2.0;  // [V12.5] Fase 2: Al tocar (+2R), bloquear Step2_LockR
-input double   InpStep2_LockR        = 1.0;  // [V12.5] Fase 2: Ganancia bloqueada (+1R)
-input double   InpStep3_TriggerR     = 3.0;  // [V12.5] Fase 3: Al tocar (+3R), bloquear Step3_LockR
-input double   InpStep3_LockR        = 2.0;  // [V12.5] Fase 3: Ganancia bloqueada (+2R)
-input bool     InpStepRunnerAbove3R  = true; // [V12.5] Por encima de 3R: Runner con 1R de holgura
+input bool     InpUseStepTrailing    = true; // [V12.9] Habilitar Fases (BE -> +1R -> +2R -> Runner)
+input double   InpStep1_TriggerR     = 0.8;  // [V12.9] Fase 1: Activar Break-Even protegido (+0.8R)
+input double   InpStep2_TriggerR     = 1.8;  // [V12.9] Fase 2: Al tocar (+1.8R), asegurar (+1.0R)
+input double   InpStep2_LockR        = 1.0;  // [V12.9] Fase 2: Ganancia bloqueada (+1.0R)
+input double   InpStep3_TriggerR     = 3.0;  // [V12.9] Fase 3: Al tocar (+3.0R), asegurar (+2.0R)
+input double   InpStep3_LockR        = 2.0;  // [V12.9] Fase 3: Ganancia bloqueada (+2.0R)
+input bool     InpStepRunnerAbove3R  = true; // [V12.9] Por encima de 3R: Runner con 1R de holgura
 
 input bool     InpUseTrailingStop    = false; // Trailing Stop continuo clásico (false si se usan Fases)
 input bool     InpUseATRTrailing     = true;
@@ -73,13 +72,13 @@ input int      InpTrailingStep       = 20;
 input int      InpMaxDailyTrades     = 16;
 input bool     InpUseLiquidityTraps  = true;
 
-input group "=== FILTROS DE SEGURIDAD Y SESION (V12.2) ==="
+input group "=== FILTROS DE SEGURIDAD Y SESION (V12.9) ==="
 input int      InpCooldownBars       = 2;
-input bool     InpUseSessionFilter   = false; // [V12.4] Default false (evita desfase horario de broker XM)
+input bool     InpUseSessionFilter   = false; // Default false (evita desfase horario de broker XM)
 input int      InpStartHour          = 0;
 input int      InpEndHour            = 24;
 input bool     InpUseATRBreakEven    = true;
-input double   InpBE_ATR_Mult        = 1.0;
+input double   InpBE_ATR_Mult        = 0.8;  // [V12.9] 0.8x ATR para asegurar BE equilibrado
 
 input group "=== FILTRO MULTITEMPORALIDAD (MTF) ==="
 input bool            InpUseMTFFilter      = true;
@@ -94,7 +93,8 @@ datetime g_last_reset_day = 0;
 int      g_daily_trades   = 0;
 datetime g_last_bar_time  = 0;
 const int MAGIC_NUMBER    = 777999;
-double   g_last_trade_profit = 0; // [V12.6] Ganancia/Pérdida del último trade cerrado
+double   g_last_trade_profit = 0; // Ganancia/Pérdida del último trade cerrado
+int      g_consecutive_losses = 0; // Contador de pérdidas consecutivas
 
 double g_lot_size;
 int    g_max_spread;
@@ -107,7 +107,7 @@ int    g_rsi_oversold;
 bool   g_gold_mode_active = false;
 double g_momentum_spike_multiplier;
 double g_risk_reward;
-double g_min_sl_price = 0; // [V12.4] SL minimo en precio (0 = solo ATR). Para ORO = $15.00
+double g_min_sl_price = 0; // SL minimo en precio (0 = solo ATR). Para ORO = $15.00
 
 // [OPT #3] Cache de Indicadores
 double g_ma_h1_cache      = 0;
@@ -117,6 +117,10 @@ double g_rsi_cache        = 0;
 double g_adx_cache        = 0;
 double g_atr_cache        = 0;
 double g_atr_0_cache      = 0;
+
+// [V12.7] Cache de rango H1 (evita llamadas repetitivas a iHighest/iLowest)
+double g_h1_high_cache    = 0;
+double g_h1_low_cache     = 0;
 
 // [FIX #2]
 ulong g_partial_closed_tickets[];
@@ -137,19 +141,19 @@ void AutoTuneAssets() {
       if(StringFind(symbol,"XAU") >= 0 || StringFind(symbol,"GOLD") >= 0) {
          g_gold_mode_active = true;
          g_lot_size = (!InpUseAutoRiskPercent && InpLotSize > 0.01) ? InpLotSize : 0.01;
-         g_max_spread = 75; g_distancia_puntos = 600; g_be_trigger = 500;
-         g_adx_threshold = 20; g_atr_multiplier = 2.0; g_risk_reward = 3.0; // [V12.4] 1:3 Base
+         g_max_spread = 75; g_distancia_puntos = 600; g_be_trigger = 600; // [V12.9] BE Trigger equilibrado en puntos
+         g_adx_threshold = 20; g_atr_multiplier = 2.0; g_risk_reward = 3.0;
          g_rsi_oversold = 38; g_rsi_overbought = 62;
-         g_momentum_spike_multiplier = 4.5; // [V12.4] Calibrado para M1 en ORO
-         g_min_sl_price = 15.0; // [V12.4] SL minimo $15 USD para ORO (evita SL de $8-9 en ATR bajo)
-         Print("AURUM GOLD MODE V12.5 ACTIVE: ATR x2.0, R:R 1:3, RSI 38/62, Spike x4.5, SL min $15");
+         g_momentum_spike_multiplier = 4.5;
+         g_min_sl_price = 15.0; // SL minimo $15 USD para ORO
+         Print("AURUM GOLD MODE V12.9 ACTIVE: ATR x2.0, R:R 1:3, Multi-Phase Trailing (BE 0.8R), SL min $15");
       }
    }
    if(InpAutoForexSettings) {
       string symbol = _Symbol; StringToUpper(symbol);
       if(StringFind(symbol,"EURUSD") >= 0) {
          g_distancia_puntos = 250; g_rsi_oversold = 44; g_rsi_overbought = 60;
-         g_adx_threshold = 15; g_be_trigger = 200; g_atr_multiplier = 2.5;
+         g_adx_threshold = 15; g_be_trigger = 150; g_atr_multiplier = 2.5;
          g_risk_reward = 2.0; g_momentum_spike_multiplier = 4.5;
          g_min_sl_price = 70 * _Point; // Minimo 7.0 pips de SL (evita salidas prematuras por mechas en M5)
          Print("AURUM FOREX V12.5 EURUSD (Spread max: ", g_max_spread, ", SL min: 7.0 pips)");
@@ -256,6 +260,9 @@ void UpdateIndicatorCache() {
    if(CopyBuffer(hRSI,    0, 0, 2, b) > 0) g_rsi_cache = b[1];
    if(CopyBuffer(hADX,    0, 0, 2, b) > 0) g_adx_cache = b[1];
    UpdateATRCache();
+   // [V12.7] Cache de rango H1
+   g_h1_high_cache = iHigh(_Symbol, PERIOD_H1, iHighest(_Symbol, PERIOD_H1, MODE_HIGH, 20, 1));
+   g_h1_low_cache  = iLow(_Symbol,  PERIOD_H1, iLowest(_Symbol,  PERIOD_H1, MODE_LOW,  20, 1));
 }
 
 // [FIX #2]
@@ -315,8 +322,28 @@ int OnInit() {
       Print("[ALERTA] Trading automatico deshabilitado por broker.");
    if(_Period >= PERIOD_H1)
       Print("[AVISO TEMPORALIDAD] AurumSniper cargado en ", EnumToString(_Period), ". Para operaciones Sniper de alta precision se recomienda M1 o M5.");
+   
+   // [V12.9] Diagnóstico de Capital y Riesgo por Trade
+   double min_vol = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN);
+   double contract = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_CONTRACT_SIZE);
+   double cur_eq = AccountInfoDouble(ACCOUNT_EQUITY);
+   double sample_sl_dist = (g_min_sl_price > 0) ? g_min_sl_price : 100 * _Point;
+   double ask_price = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
+   double calc_loss_min_lot = 0.0;
+   if(!OrderCalcProfit(ORDER_TYPE_BUY, _Symbol, min_vol, ask_price, ask_price - sample_sl_dist, calc_loss_min_lot) || calc_loss_min_lot >= 0) {
+      calc_loss_min_lot = sample_sl_dist * (contract > 0 ? contract : 100.0) * min_vol;
+   } else {
+      calc_loss_min_lot = MathAbs(calc_loss_min_lot);
+   }
+   PrintFormat("[DIAGNOSTICO V12.9] Simbolo: %s | Contrato: %.0f | Lote Min: %.2f | Riesgo Min SL ($%.2f): $%.2f | Balance: $%.2f",
+               _Symbol, contract, min_vol, sample_sl_dist, calc_loss_min_lot, cur_eq);
+   if(cur_eq > 0 && calc_loss_min_lot > cur_eq * 0.10) {
+      PrintFormat("[ADVERTENCIA CAPITAL] El lote minimo (%.2f) arriesga $%.2f (%.1f%% del capital). Recomendado capital >= $%.2f",
+                  min_vol, calc_loss_min_lot, (calc_loss_min_lot / cur_eq)*100.0, calc_loss_min_lot * 20.0);
+   }
+
    EventSetTimer(1);
-   Print("AURUM V12.6 ULTIMATE Loaded.");
+   Print("AURUM V12.9 ULTIMATE Loaded.");
    return(INIT_SUCCEEDED);
 }
 
@@ -325,6 +352,7 @@ void OnDeinit(const int reason) {
    IndicatorRelease(hRSI); IndicatorRelease(hADX); IndicatorRelease(hATR);
    EventKillTimer();
    ObjectsDeleteAll(0, "lbl_");
+   ObjectsDeleteAll(0, "tp_lvl_");
 }
 
 // [OPT #4 & V12.6]
@@ -336,30 +364,70 @@ void OnTradeTransaction(const MqlTradeTransaction& trans,
    if(HistoryDealSelect(trans.deal)) {
       long et = HistoryDealGetInteger(trans.deal, DEAL_ENTRY);
       if(et == DEAL_ENTRY_OUT || et == DEAL_ENTRY_INOUT) {
-         datetime ct = (datetime)HistoryDealGetInteger(trans.deal, DEAL_TIME);
-         if(ct > g_last_trade_close) {
-            g_last_trade_close = ct;
-            g_last_trade_profit = HistoryDealGetDouble(trans.deal, DEAL_PROFIT);
-         }
+          datetime ct = (datetime)HistoryDealGetInteger(trans.deal, DEAL_TIME);
+          if(ct > g_last_trade_close) {
+             g_last_trade_close = ct;
+             g_last_trade_profit = HistoryDealGetDouble(trans.deal, DEAL_PROFIT);
+             // [V12.7] Tracking de pérdidas consecutivas
+             if(g_last_trade_profit < -0.01)
+                g_consecutive_losses++;
+             else
+                g_consecutive_losses = 0;
+             // [V12.7] Log de resultado del trade
+             double deal_price = HistoryDealGetDouble(trans.deal, DEAL_PRICE);
+             double deal_vol   = HistoryDealGetDouble(trans.deal, DEAL_VOLUME);
+             string deal_sym   = HistoryDealGetString(trans.deal, DEAL_SYMBOL);
+             string result_tag = (g_last_trade_profit >= 0) ? "GANANCIA" : "PERDIDA";
+             Print("[CIERRE ",result_tag,"] ",deal_sym," Vol:",DoubleToString(deal_vol,2),
+                   " @ ",DoubleToString(deal_price,_Digits),
+                   " P&L: $",DoubleToString(g_last_trade_profit,2),
+                   " Losses seguidos: ",g_consecutive_losses);
+          }
       }
    }
 }
 
 //+------------------------------------------------------------------+
+// [V12.9] Cálculo de Lotaje con OrderCalcProfit de Alta Precisión
 double CalculateLotSize(double sl_dist_price) {
    if(!InpUseAutoRiskPercent) return g_lot_size;
    double equity = AccountInfoDouble(ACCOUNT_EQUITY);
-   if(equity <= 0) return g_lot_size;
-   double risk_amount = equity * (InpRiskPercent / 100.0);
-   double tick_size   = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_SIZE);
-   double tick_value  = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_VALUE);
-   if(tick_size <= 0 || tick_value <= 0 || sl_dist_price <= 0) return g_lot_size;
-   double loss_per_lot = (sl_dist_price / tick_size) * tick_value;
-   if(loss_per_lot <= 0) return g_lot_size;
-   double raw_lot = risk_amount / loss_per_lot;
+   if(equity <= 0 || sl_dist_price <= 0) return g_lot_size;
+
+   // [V12.7] Reducir riesgo tras pérdidas consecutivas (anti-cascade)
+   double effective_risk = InpRiskPercent;
+   if(g_consecutive_losses >= 2) effective_risk *= 0.5;  // 50% del riesgo tras 2 losses
+   if(g_consecutive_losses >= 3) effective_risk *= 0.5;  // 25% del riesgo tras 3+ losses
+   double risk_amount = equity * (effective_risk / 100.0);
+
+   double ask = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
+   double one_lot_loss = 0.0;
+   
+   // Consulta nativa del motor de cálculo de MT5
+   if(OrderCalcProfit(ORDER_TYPE_BUY, _Symbol, 1.0, ask, ask - sl_dist_price, one_lot_loss)) {
+      one_lot_loss = MathAbs(one_lot_loss);
+   }
+
+   // Fallback con tamaño de contrato si OrderCalcProfit no devuelve valor positivo
+   if(one_lot_loss <= 0) {
+      double contract = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_CONTRACT_SIZE);
+      if(contract <= 0) contract = 100.0;
+      double tick_size  = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_SIZE);
+      double tick_val   = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_VALUE);
+      if(tick_size > 0 && tick_val > 0) {
+         one_lot_loss = (sl_dist_price / tick_size) * tick_val;
+      } else {
+         one_lot_loss = sl_dist_price * contract;
+      }
+   }
+
+   if(one_lot_loss <= 0) return g_lot_size;
+
+   double raw_lot  = risk_amount / one_lot_loss;
    double min_vol  = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN);
    double max_vol  = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MAX);
    double step_vol = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_STEP);
+
    if(step_vol > 0)
       raw_lot = MathFloor((raw_lot - min_vol) / step_vol + 0.000001) * step_vol + min_vol;
    raw_lot = MathMax(min_vol, MathMin(max_vol, raw_lot));
@@ -389,19 +457,33 @@ bool CheckCooldownPass() {
 }
 
 //+------------------------------------------------------------------+
-// [V12.6] Filtro de Zona de Descuento (Compras baratas) y Premium (Ventas caras)
+// [V12.9] Filtro de Zona de Descuento (Compras baratas) y Premium (Ventas caras)
 bool IsInDiscountPremiumZone(string type) {
    if(!InpUseDiscountPremiumFilter) return true;
-   double h1_high = iHigh(_Symbol, PERIOD_H1, iHighest(_Symbol, PERIOD_H1, MODE_HIGH, 20, 1));
-   double h1_low  = iLow(_Symbol,  PERIOD_H1, iLowest(_Symbol,  PERIOD_H1, MODE_LOW,  20, 1));
+   // [V12.7] Usar cache de rango H1
+   double h1_high = g_h1_high_cache;
+   double h1_low  = g_h1_low_cache;
    double range = h1_high - h1_low;
    if(range <= 0) return true;
    
    double cur_price = (type == "BUY") ? SymbolInfoDouble(_Symbol, SYMBOL_ASK) : SymbolInfoDouble(_Symbol, SYMBOL_BID);
-   double eq_price  = h1_low + (range * (InpEquilibriumPercent / 100.0));
+   // [V12.9] Equilibrio dinámico adaptativo con ADX
+   double eq_pct = InpEquilibriumPercent; // Base: 50%
+   double adx = g_adx_cache;
+   if(adx >= 25.0) {
+      // En tendencia moderada (ADX>=25): flexibilizar 10%
+      if(type == "BUY")  eq_pct = MathMin(eq_pct + 10.0, 60.0);
+      if(type == "SELL") eq_pct = MathMax(eq_pct - 10.0, 40.0);
+   }
+   if(adx >= 35.0) {
+      // En tendencia fuerte/parabólica (ADX>=35): flexibilizar 15% para compras/ventas de continuación
+      if(type == "BUY")  eq_pct = MathMin(eq_pct + 5.0, 65.0);
+      if(type == "SELL") eq_pct = MathMax(eq_pct - 5.0, 35.0);
+   }
+   double eq_price = h1_low + (range * (eq_pct / 100.0));
    
-   if(type == "BUY")  return (cur_price <= eq_price); // Solo comprar en la mitad inferior (Descuento)
-   if(type == "SELL") return (cur_price >= eq_price); // Solo vender en la mitad superior (Premium)
+   if(type == "BUY")  return (cur_price <= eq_price); // Solo comprar en zona Descuento
+   if(type == "SELL") return (cur_price >= eq_price); // Solo vender en zona Premium
    return true;
 }
 
@@ -492,8 +574,19 @@ void OnTick() {
    bool buy_zone_ok  = (in_zone_buy  || is_trap_buy)  && discount_buy_ok;
    bool sell_zone_ok = (in_zone_sell || is_trap_sell) && discount_sell_ok;
 
-   double eff_rsi_oversold   = (adx >= 30.0) ? (g_rsi_oversold   + 5.0) : g_rsi_oversold;
-   double eff_rsi_overbought = (adx >= 30.0) ? (g_rsi_overbought - 5.0) : g_rsi_overbought;
+   // [V12.7] RSI Adaptativo: En tendencia fuerte, relajar umbrales progresivamente
+   double eff_rsi_oversold   = g_rsi_oversold;    // Base: 38 (Gold)
+   double eff_rsi_overbought = g_rsi_overbought;  // Base: 62 (Gold)
+   if(adx >= 25.0) {
+      // Tendencia moderada: relajar 4 pts (42/58 para Gold)
+      eff_rsi_oversold   += 4.0;
+      eff_rsi_overbought -= 4.0;
+   }
+   if(adx >= 35.0) {
+      // Tendencia fuerte: relajar 3 pts más (45/55 para Gold)
+      eff_rsi_oversold   += 3.0;
+      eff_rsi_overbought -= 3.0;
+   }
 
    double ask = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
    double bid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
@@ -551,7 +644,11 @@ void OnTick() {
       double trade_lot = CalculateLotSize(sl_dist);
       if(trade.Buy(trade_lot, _Symbol, ask, sl, tp, "Aurum V12 Sniper")) {
          g_daily_trades++;
-         Print("[COMPRA] Lote:",DoubleToString(trade_lot,2)," SL:",DoubleToString(sl,_Digits)," TP:",DoubleToString(tp,_Digits)," SL_dist:",DoubleToString(sl_dist,_Digits)," (",DoubleToString(sl_dist/_Point,0)," pts) Risk:",DoubleToString(InpRiskPercent,1),"%");
+         Print("[COMPRA] Lote:",DoubleToString(trade_lot,2)," SL:",DoubleToString(sl,_Digits)," TP:",DoubleToString(tp,_Digits),
+               " SL_dist:$",DoubleToString(sl_dist,2)," (",DoubleToString(sl_dist/_Point,0)," pts)",
+               " ATR:",DoubleToString(atr,2)," R:R 1:",DoubleToString(g_risk_reward,1),
+               " Risk:",DoubleToString(InpRiskPercent,1),"%",
+               (g_consecutive_losses >= 2 ? " [ANTI-CASCADE]": ""));
       }
    }
    if(trend_bear && sell_zone_ok && rsi > eff_rsi_overbought && adx > g_adx_threshold && !is_spike_sell) {
@@ -564,7 +661,11 @@ void OnTick() {
       double trade_lot = CalculateLotSize(sl_dist);
       if(trade.Sell(trade_lot, _Symbol, bid, sl, tp, "Aurum V12 Sniper")) {
          g_daily_trades++;
-         Print("[VENTA] Lote:",DoubleToString(trade_lot,2)," SL:",DoubleToString(sl,_Digits)," TP:",DoubleToString(tp,_Digits)," SL_dist:",DoubleToString(sl_dist,_Digits)," (",DoubleToString(sl_dist/_Point,0)," pts) Risk:",DoubleToString(InpRiskPercent,1),"%");
+         Print("[VENTA] Lote:",DoubleToString(trade_lot,2)," SL:",DoubleToString(sl,_Digits)," TP:",DoubleToString(tp,_Digits),
+               " SL_dist:$",DoubleToString(sl_dist,2)," (",DoubleToString(sl_dist/_Point,0)," pts)",
+               " ATR:",DoubleToString(atr,2)," R:R 1:",DoubleToString(g_risk_reward,1),
+               " Risk:",DoubleToString(InpRiskPercent,1),"%",
+               (g_consecutive_losses >= 2 ? " [ANTI-CASCADE]": ""));
       }
    }
 }
@@ -692,10 +793,10 @@ void GestionarPosicionesPro() {
             target_sl = (type == POSITION_TYPE_BUY) ? (entry + locked_dist) : (entry - locked_dist);
             phase_name = "FASE 2 (2R -> SL a +1R Asegurado)";
          }
-         // FASE 1: 1R o Trigger BE Alcanzado (SL a Break-Even + lock pips)
-         else if(profit_R >= InpStep1_TriggerR || profit_puntos >= effective_be_trigger) {
+         // FASE 1: Trigger BE Alcanzado (SL a Break-Even + lock pips)
+         else if(profit_R >= InpStep1_TriggerR) {
             target_sl = (type == POSITION_TYPE_BUY) ? (entry + lock_dist) : (entry - lock_dist);
-            phase_name = "FASE 1 (1R/BE -> SL a Entrada Protegida)";
+            phase_name = StringFormat("FASE 1 (%.1fR/BE -> SL a Entrada Protegida)", InpStep1_TriggerR);
 
             // Cierre parcial en Fase 1 si está habilitado
             if(InpUsePartials && pos_magic == MAGIC_NUMBER && !IsPartialAlreadyClosed(ticket)) {
@@ -726,9 +827,20 @@ void GestionarPosicionesPro() {
                double modify_tp = tp;
                // Si estamos en Runner Fase 3 y supera 3R, expandimos o dejamos correr sin TP rígido
                if(InpStepRunnerAbove3R && profit_R >= InpStep3_TriggerR && tp > 0) modify_tp = 0;
+               // [V12.7] Validar stops antes de modificar (evita "Invalid stops")
                CheckStops(target_sl, modify_tp, (type == POSITION_TYPE_BUY));
-               if(trade.PositionModify(ticket, target_sl, modify_tp)) {
-                  Print("[",phase_name," Ticket ",ticket,"] SL->",DoubleToString(target_sl,_Digits)," (Profit: ",DoubleToString(profit_R,2),"R)");
+               // [V12.7] Verificar que el SL no empeoró tras CheckStops
+               if(type == POSITION_TYPE_BUY  && target_sl < sl && sl > 0) { /* skip */ }
+               else if(type == POSITION_TYPE_SELL && target_sl > sl && sl > 0) { /* skip */ }
+               else if(trade.PositionModify(ticket, target_sl, modify_tp)) {
+                  // [V12.7] Throttle: solo logear si SL cambió significativamente (>10 puntos)
+                  static double last_logged_sl = 0;
+                  static ulong  last_logged_tk = 0;
+                  if(ticket != last_logged_tk || MathAbs(target_sl - last_logged_sl) >= 10.0 * _Point) {
+                     Print("[",phase_name," Ticket ",ticket,"] SL->",DoubleToString(target_sl,_Digits)," (Profit: ",DoubleToString(profit_R,2),"R)");
+                     last_logged_sl = target_sl;
+                     last_logged_tk = ticket;
+                  }
                }
             }
          }
@@ -801,6 +913,7 @@ void CheckAndResetDaily() {
       g_last_reset_day = iTime(_Symbol, PERIOD_D1, 0);
       g_daily_trades   = 0;
       g_last_trade_close = 0;
+      g_consecutive_losses = 0; // [V12.7] Reset cascading losses
       ArrayResize(g_partial_closed_tickets, 0);
       Print("[NUEVO DIA] Balance, Trades y Parciales Reseteados.");
    }
@@ -863,6 +976,93 @@ void CheckStops(double &sl, double &tp, bool isBuy) {
    sl = NormalizeDouble(sl, _Digits); tp = NormalizeDouble(tp, _Digits);
 }
 
+// [V12.6] Funciones de Dibujo en Gráfico para TP1 (+1R), TP2 (+2R) y TP3 (+3R)
+void DrawChartLine(string name, double price_level, color clr, ENUM_LINE_STYLE style, int width, string tooltip) {
+   if(ObjectFind(0, name) < 0) {
+      ObjectCreate(0, name, OBJ_HLINE, 0, 0, price_level);
+   }
+   ObjectSetDouble(0, name, OBJPROP_PRICE, price_level);
+   ObjectSetInteger(0, name, OBJPROP_COLOR, clr);
+   ObjectSetInteger(0, name, OBJPROP_STYLE, style);
+   ObjectSetInteger(0, name, OBJPROP_WIDTH, width);
+   ObjectSetInteger(0, name, OBJPROP_SELECTABLE, false);
+   ObjectSetInteger(0, name, OBJPROP_BACK, true);
+   ObjectSetString(0, name, OBJPROP_TOOLTIP, tooltip);
+}
+
+void DrawChartText(string name, datetime t, double price_lvl, string text, color clr) {
+   if(ObjectFind(0, name) < 0) {
+      ObjectCreate(0, name, OBJ_TEXT, 0, t, price_lvl);
+      ObjectSetInteger(0, name, OBJPROP_ANCHOR, ANCHOR_LEFT);
+      ObjectSetInteger(0, name, OBJPROP_FONTSIZE, 9);
+   }
+   ObjectSetInteger(0, name, OBJPROP_TIME, t);
+   ObjectSetDouble(0, name, OBJPROP_PRICE, price_lvl);
+   ObjectSetString(0, name, OBJPROP_TEXT, text);
+   ObjectSetInteger(0, name, OBJPROP_COLOR, clr);
+}
+
+void CleanPositionLevels() {
+   ObjectsDeleteAll(0, "tp_lvl_");
+}
+
+void DrawPositionLevels() {
+   ulong active_ticket = 0;
+   double entry = 0, sl = 0, tp = 0, cur_price = 0;
+   long type = -1;
+   
+   for(int i = PositionsTotal() - 1; i >= 0; i--) {
+      ulong ticket = PositionGetTicket(i);
+      if(ticket <= 0 || !PositionSelectByTicket(ticket)) continue;
+      if(PositionGetString(POSITION_SYMBOL) != _Symbol) continue;
+      long magic = PositionGetInteger(POSITION_MAGIC);
+      if(magic != MAGIC_NUMBER && !InpManageManualTrades) continue;
+      
+      active_ticket = ticket;
+      entry     = PositionGetDouble(POSITION_PRICE_OPEN);
+      sl        = PositionGetDouble(POSITION_SL);
+      tp        = PositionGetDouble(POSITION_TP);
+      type      = PositionGetInteger(POSITION_TYPE);
+      cur_price = PositionGetDouble(POSITION_PRICE_CURRENT);
+      break;
+   }
+   
+   if(active_ticket == 0) {
+      CleanPositionLevels();
+      return;
+   }
+   
+   double atr_val_now = (hATR != INVALID_HANDLE && g_atr_0_cache > 0) ? g_atr_0_cache : 0;
+   double r_dist = (atr_val_now > 0) ? (atr_val_now * g_atr_multiplier) : (g_distancia_puntos * _Point * 2.0);
+   if(g_min_sl_price > 0 && r_dist < g_min_sl_price) r_dist = g_min_sl_price;
+   
+   double profit_price = (type == POSITION_TYPE_BUY) ? (cur_price - entry) : (entry - cur_price);
+   double profit_R = (r_dist > 0) ? (profit_price / r_dist) : 0;
+   
+   double tp1 = (type == POSITION_TYPE_BUY) ? (entry + InpStep1_TriggerR * r_dist) : (entry - InpStep1_TriggerR * r_dist);
+   double tp2 = (type == POSITION_TYPE_BUY) ? (entry + InpStep2_TriggerR * r_dist) : (entry - InpStep2_TriggerR * r_dist);
+   double tp3 = (type == POSITION_TYPE_BUY) ? (entry + InpStep3_TriggerR * r_dist) : (entry - InpStep3_TriggerR * r_dist);
+   
+   tp1 = NormalizeDouble(tp1, _Digits);
+   tp2 = NormalizeDouble(tp2, _Digits);
+   tp3 = NormalizeDouble(tp3, _Digits);
+   
+   string tp1_tt = StringFormat("TP1 (%.1fR / BE & Parcial): %.2f | %s", InpStep1_TriggerR, tp1, (profit_R >= InpStep1_TriggerR ? "ALCANZADO" : StringFormat("Faltan %.1f pts", MathAbs(tp1 - cur_price)/_Point)));
+   string tp2_tt = StringFormat("TP2 (%.1fR / Lock +%.1fR): %.2f | %s", InpStep2_TriggerR, InpStep2_LockR, tp2, (profit_R >= InpStep2_TriggerR ? "ALCANZADO" : StringFormat("Faltan %.1f pts", MathAbs(tp2 - cur_price)/_Point)));
+   string tp3_tt = StringFormat("TP3 (%.1fR / Runner): %.2f | %s", InpStep3_TriggerR, tp3, (profit_R >= InpStep3_TriggerR ? "ALCANZADO" : StringFormat("Faltan %.1f pts", MathAbs(tp3 - cur_price)/_Point)));
+   
+   DrawChartLine("tp_lvl_1", tp1, clrGold, STYLE_DASH, 2, tp1_tt);
+   DrawChartLine("tp_lvl_2", tp2, clrDeepSkyBlue, STYLE_DASH, 2, tp2_tt);
+   DrawChartLine("tp_lvl_3", tp3, clrLime, STYLE_SOLID, 2, tp3_tt);
+   
+   datetime bar0_time = iTime(_Symbol, _Period, 0);
+   if(bar0_time == 0) bar0_time = TimeCurrent();
+   
+   DrawChartText("tp_lvl_txt1", bar0_time, tp1, StringFormat("  🎯 TP1 (%.1fR/BE): ", InpStep1_TriggerR) + DoubleToString(tp1, _Digits) + (profit_R >= InpStep1_TriggerR ? " [ALCANZADO ✅]" : ""), clrGold);
+   DrawChartText("tp_lvl_txt2", bar0_time, tp2, StringFormat("  🎯 TP2 (%.1fR/+%.1fR): ", InpStep2_TriggerR, InpStep2_LockR) + DoubleToString(tp2, _Digits) + (profit_R >= InpStep2_TriggerR ? " [ALCANZADO ✅]" : ""), clrDeepSkyBlue);
+   DrawChartText("tp_lvl_txt3", bar0_time, tp3, StringFormat("  🚀 TP3 (%.1fR/Runner): ", InpStep3_TriggerR) + DoubleToString(tp3, _Digits) + (profit_R >= InpStep3_TriggerR ? " [ALCANZADO ✅]" : ""), clrLime);
+}
+
 // [OPT #6] Dashboard usa cache de indicadores
 void UpdateDashboard() {
    double price = iClose(_Symbol, _Period, 0);
@@ -871,7 +1071,7 @@ void UpdateDashboard() {
    string trend_txt = (price > ma) ? "ALCISTA (Busca BUY)" : "BAJISTA (Busca SELL)";
    color trend_clr = (price > ma) ? clrLime : clrRed;
    int y = 20;
-   DrawLabel("lbl_Title", "AURUM SNIPER V12.6 (ULTIMATE)", 20, y, clrGold, 12); y += 22;
+   DrawLabel("lbl_Title", "AURUM SNIPER V12.9 (ULTIMATE)", 20, y, clrGold, 12); y += 22;
    long sym_trade_mode = SymbolInfoInteger(_Symbol, SYMBOL_TRADE_MODE);
    bool sym_enabled  = (sym_trade_mode != SYMBOL_TRADE_MODE_DISABLED);
    bool algo_allowed = sym_enabled && TerminalInfoInteger(TERMINAL_TRADE_ALLOWED) &&
@@ -909,7 +1109,60 @@ void UpdateDashboard() {
    color adx_clr = clrOrange;
    if(adx > g_adx_threshold) { adx_txt += " (ACTIVO)"; adx_clr = clrLime; } else adx_txt += " (DORMIDO)";
    DrawLabel("lbl_ADX", adx_txt, 20, y, adx_clr, 10); y += 20;
-   DrawLabel("lbl_Partials","Parciales hoy: "+IntegerToString(ArraySize(g_partial_closed_tickets)),20,y,clrSilver,10);
+   DrawLabel("lbl_Partials","Parciales hoy: "+IntegerToString(ArraySize(g_partial_closed_tickets)),20,y,clrSilver,10); y += 20;
+
+   // Dibujar lineas y textos de niveles TP en el gráfico
+   DrawPositionLevels();
+
+   // Extraer datos del trade en vivo para el Dashboard
+   ulong act_ticket = 0; double pos_entry = 0, pos_cur = 0; long pos_type = -1;
+   for(int i = PositionsTotal() - 1; i >= 0; i--) {
+      ulong tk = PositionGetTicket(i);
+      if(tk > 0 && PositionSelectByTicket(tk) && PositionGetString(POSITION_SYMBOL) == _Symbol) {
+         long mg = PositionGetInteger(POSITION_MAGIC);
+         if(mg == MAGIC_NUMBER || InpManageManualTrades) {
+            act_ticket = tk;
+            pos_entry = PositionGetDouble(POSITION_PRICE_OPEN);
+            pos_cur   = PositionGetDouble(POSITION_PRICE_CURRENT);
+            pos_type  = PositionGetInteger(POSITION_TYPE);
+            break;
+         }
+      }
+   }
+
+   if(act_ticket > 0) {
+      double atr_val_now = (hATR != INVALID_HANDLE && g_atr_0_cache > 0) ? g_atr_0_cache : 0;
+      double r_dist = (atr_val_now > 0) ? (atr_val_now * g_atr_multiplier) : (g_distancia_puntos * _Point * 2.0);
+      if(g_min_sl_price > 0 && r_dist < g_min_sl_price) r_dist = g_min_sl_price;
+      
+      double profit_price = (pos_type == POSITION_TYPE_BUY) ? (pos_cur - pos_entry) : (pos_entry - pos_cur);
+      double profit_R = (r_dist > 0) ? (profit_price / r_dist) : 0;
+      
+      double tp1 = (pos_type == POSITION_TYPE_BUY) ? (pos_entry + InpStep1_TriggerR * r_dist) : (pos_entry - InpStep1_TriggerR * r_dist);
+      double tp2 = (pos_type == POSITION_TYPE_BUY) ? (pos_entry + InpStep2_TriggerR * r_dist) : (pos_entry - InpStep2_TriggerR * r_dist);
+      double tp3 = (pos_type == POSITION_TYPE_BUY) ? (pos_entry + InpStep3_TriggerR * r_dist) : (pos_entry - InpStep3_TriggerR * r_dist);
+      
+      DrawLabel("lbl_TradeHeader", "=== TRADE EN VIVO (" + (pos_type == POSITION_TYPE_BUY ? "BUY" : "SELL") + ") ===", 20, y, clrGold, 10); y += 18;
+      
+      color prof_clr = (profit_R >= 0) ? clrLime : clrRed;
+      DrawLabel("lbl_TradeProfitR", StringFormat("Progreso: %.2f R (Puntos: %+.0f)", profit_R, profit_price / _Point), 20, y, prof_clr, 10); y += 18;
+      
+      string s_tp1 = (profit_R >= InpStep1_TriggerR) ? StringFormat("TP1 (%.1fR): ALCANZADO ✅ (BE/Parcial)", InpStep1_TriggerR) : StringFormat("TP1 (%.1fR): %.2f (Faltan %.1f pts)", InpStep1_TriggerR, tp1, MathAbs(tp1 - pos_cur)/_Point);
+      DrawLabel("lbl_DashTP1", s_tp1, 20, y, (profit_R >= InpStep1_TriggerR ? clrLime : clrGold), 9); y += 16;
+      
+      string s_tp2 = (profit_R >= InpStep2_TriggerR) ? StringFormat("TP2 (%.1fR): ALCANZADO ✅ (SL en +%.1fR)", InpStep2_TriggerR, InpStep2_LockR) : StringFormat("TP2 (%.1fR): %.2f (Faltan %.1f pts)", InpStep2_TriggerR, tp2, MathAbs(tp2 - pos_cur)/_Point);
+      DrawLabel("lbl_DashTP2", s_tp2, 20, y, (profit_R >= InpStep2_TriggerR ? clrLime : clrDeepSkyBlue), 9); y += 16;
+      
+      string s_tp3 = (profit_R >= InpStep3_TriggerR) ? StringFormat("TP3 (%.1fR): ALCANZADO ✅ (RUNNER Activo)", InpStep3_TriggerR) : StringFormat("TP3 (%.1fR): %.2f (Faltan %.1f pts)", InpStep3_TriggerR, tp3, MathAbs(tp3 - pos_cur)/_Point);
+      DrawLabel("lbl_DashTP3", s_tp3, 20, y, (profit_R >= InpStep3_TriggerR ? clrLime : clrWhite), 9); y += 16;
+   } else {
+      ObjectDelete(0, "lbl_TradeHeader");
+      ObjectDelete(0, "lbl_TradeProfitR");
+      ObjectDelete(0, "lbl_DashTP1");
+      ObjectDelete(0, "lbl_DashTP2");
+      ObjectDelete(0, "lbl_DashTP3");
+   }
+
    ChartRedraw();
 }
 
