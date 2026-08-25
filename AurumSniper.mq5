@@ -23,17 +23,20 @@
 
 // ==================== INPUTS ====================
 input group "=== GESTION DE RIESGO AVANZADA (V12.99) ==="
-input double   InpLotSize            = 0.01;
-input bool     InpUseAutoRiskPercent = true;
-input double   InpRiskPercent        = 1.0; // Arriesga exactamente el 1.0% del capital
-input double   InpMaxDailyLoss       = 3.0;
-input bool     InpAutoDailyReset     = true;
+input double   InpLotSize                 = 0.01;
+input bool     InpUseAutoRiskPercent      = true;
+input double   InpRiskPercent             = 1.0; // Arriesga exactamente el 1.0% del capital
+input double   InpMaxAllowedRiskPercent   = 5.0; // [V12.99] Riesgo Máximo Permitido por Trade (% del capital)
+input bool     InpStrictRiskProtection    = false;// [V12.99] Bloquear trade si el lote mínimo excede el Riesgo Máximo
+input double   InpMaxDailyLoss            = 3.0;
+input bool     InpAutoDailyReset          = true;
 
 input group "=== AUTO-TUNING POR ACTIVO (V12.99) ==="
-input bool     InpAutoGoldSettings   = true;
-input bool     InpAutoForexSettings  = true;
-input bool     InpAutoCryptoSettings = true;
-input bool     InpAutoIndexSettings  = true;
+input bool     InpAutoGoldSettings        = true;
+input double   InpGoldMinSL               = 6.0;  // [V12.99] SL Mínimo para Oro ($6.00 = 600 pts en M5 Scalp)
+input bool     InpAutoForexSettings       = true;
+input bool     InpAutoCryptoSettings      = true;
+input bool     InpAutoIndexSettings       = true;
 
 input group "=== FILTROS DE ENTRADA Y PORTAFOLIO (V12.95) ==="
 input bool     InpUseDiscountPremiumFilter = true; // Exigir Descuento en Compras y Premium en Ventas
@@ -141,6 +144,27 @@ ulong g_partial_closed_tickets[];
 datetime g_last_trade_close = 0;
 
 //+------------------------------------------------------------------+
+// [V12.99] Helper de Normalización de Volumen y Microlotes
+double NormalizeLotVolume(double lot) {
+   double min_vol  = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN);
+   double max_vol  = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MAX);
+   double step_vol = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_STEP);
+   if(min_vol <= 0) min_vol = 0.01;
+   if(max_vol <= 0) max_vol = 100.0;
+   if(step_vol <= 0) step_vol = 0.01;
+
+   int lot_digits = 2;
+   if(step_vol >= 1.0) lot_digits = 0;
+   else if(step_vol >= 0.1) lot_digits = 1;
+   else if(step_vol >= 0.01) lot_digits = 2;
+   else lot_digits = 3;
+
+   double normalized = MathFloor((lot - min_vol) / step_vol + 0.000001) * step_vol + min_vol;
+   normalized = MathMax(min_vol, MathMin(max_vol, normalized));
+   return NormalizeDouble(normalized, lot_digits);
+}
+
+//+------------------------------------------------------------------+
 void AutoTuneAssets() {
    g_lot_size = InpLotSize; g_max_spread = InpMaxSpread;
    g_distancia_puntos = InpDistanciaPuntos; g_be_trigger = InpBE_Trigger;
@@ -157,8 +181,8 @@ void AutoTuneAssets() {
          g_adx_threshold = 20; g_atr_multiplier = 2.0; g_risk_reward = 3.0;
          g_rsi_oversold = 38; g_rsi_overbought = 62;
          g_momentum_spike_multiplier = 4.5;
-         g_min_sl_price = 15.0; // SL minimo $15 USD para ORO
-         Print("AURUM GOLD MODE V12.9 ACTIVE: ATR x2.0, R:R 1:3, Multi-Phase Trailing (BE 0.8R), SL min $15");
+         g_min_sl_price = (InpGoldMinSL > 0) ? InpGoldMinSL : 6.0; // [V12.99] SL optimizado $6.00 (600 pts) en M5
+         PrintFormat("AURUM GOLD MODE V12.99 ACTIVE: ATR x2.0, R:R 1:3, Multi-Phase Trailing (BE 0.6R), SL min $%.2f", g_min_sl_price);
       }
    }
    if(InpAutoForexSettings) {
@@ -233,14 +257,7 @@ void AutoTuneAssets() {
          Print("AURUM INDEX V12.97 ACTIVE: DAX/GER40 (Spread Max: 800, Dist: 600, RR 1:", DoubleToString(g_risk_reward,1), ", SL min: 25pts)");
       }
    }
-   double min_vol = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN);
-   double max_vol = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MAX);
-   double step_vol = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_STEP);
-   if(g_lot_size < min_vol) g_lot_size = min_vol;
-   if(g_lot_size > max_vol) g_lot_size = max_vol;
-   if(step_vol > 0)
-      g_lot_size = MathFloor((g_lot_size - min_vol) / step_vol + 0.000001) * step_vol + min_vol;
-   g_lot_size = NormalizeDouble(g_lot_size, 2);
+   g_lot_size = NormalizeLotVolume(g_lot_size);
 }
 
 // [FIX #7]
@@ -335,27 +352,27 @@ int OnInit() {
    if(_Period >= PERIOD_H1)
       Print("[AVISO TEMPORALIDAD] AurumSniper cargado en ", EnumToString(_Period), ". Para operaciones Sniper de alta precision se recomienda M1 o M5.");
    
-   // [V12.9] Diagnóstico de Capital y Riesgo por Trade
+   // [V12.99] Diagnóstico de Capital, Contrato y Riesgo por Trade
    double min_vol = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN);
    double contract = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_CONTRACT_SIZE);
    double cur_eq = AccountInfoDouble(ACCOUNT_EQUITY);
-   double sample_sl_dist = (g_min_sl_price > 0) ? g_min_sl_price : 100 * _Point;
-   double ask_price = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
-   double calc_loss_min_lot = 0.0;
-   if(!OrderCalcProfit(ORDER_TYPE_BUY, _Symbol, min_vol, ask_price, ask_price - sample_sl_dist, calc_loss_min_lot) || calc_loss_min_lot >= 0) {
-      calc_loss_min_lot = sample_sl_dist * (contract > 0 ? contract : 100.0) * min_vol;
-   } else {
-      calc_loss_min_lot = MathAbs(calc_loss_min_lot);
-   }
-   PrintFormat("[DIAGNOSTICO V12.9] Simbolo: %s | Contrato: %.0f | Lote Min: %.2f | Riesgo Min SL ($%.2f): $%.2f | Balance: $%.2f",
-               _Symbol, contract, min_vol, sample_sl_dist, calc_loss_min_lot, cur_eq);
-   if(cur_eq > 0 && calc_loss_min_lot > cur_eq * 0.10) {
-      PrintFormat("[ADVERTENCIA CAPITAL] El lote minimo (%.2f) arriesga $%.2f (%.1f%% del capital). Recomendado capital >= $%.2f",
-                  min_vol, calc_loss_min_lot, (calc_loss_min_lot / cur_eq)*100.0, calc_loss_min_lot * 20.0);
+   double sample_sl_dist = (g_min_sl_price > 0) ? g_min_sl_price : (100 * _Point);
+   double one_lot_loss = GetOneLotLoss(sample_sl_dist);
+   double calc_loss_min_lot = one_lot_loss * min_vol;
+   double risk_pct_min_lot = (cur_eq > 0) ? (calc_loss_min_lot / cur_eq) * 100.0 : 0.0;
+   
+   bool is_micro_account = (contract <= 10.0 || StringFind(_Symbol, "micro") >= 0 || StringFind(_Symbol, "m") == StringLen(_Symbol)-1);
+   string acct_type_str = is_micro_account ? "MICRO" : "ESTANDAR";
+
+   PrintFormat("[DIAGNOSTICO V12.99] Simbolo: %s (%s) | Contrato: %.0f | Lote Min: %.2f | Riesgo SL ($%.2f): $%.2f (%.1f%%) | Balance: $%.2f",
+               _Symbol, acct_type_str, contract, min_vol, sample_sl_dist, calc_loss_min_lot, risk_pct_min_lot, cur_eq);
+   if(cur_eq > 0 && risk_pct_min_lot > InpMaxAllowedRiskPercent) {
+      PrintFormat("[ADVERTENCIA CAPITAL] En cuenta %s, el lote minimo (%.2f) arriesga $%.2f (%.1f%% del capital > Max %.1f%%). Para reducir riesgo a <$1 usar cuenta Micro (%smicro) o pares Forex.",
+                  acct_type_str, min_vol, calc_loss_min_lot, risk_pct_min_lot, InpMaxAllowedRiskPercent, _Symbol);
    }
 
    EventSetTimer(1);
-   Print("AURUM V12.9 ULTIMATE Loaded.");
+   Print("AURUM V12.99 ULTIMATE Loaded.");
    return(INIT_SUCCEEDED);
 }
 
@@ -400,11 +417,47 @@ void OnTradeTransaction(const MqlTradeTransaction& trans,
 }
 
 //+------------------------------------------------------------------+
-// [V12.9] Cálculo de Lotaje con OrderCalcProfit de Alta Precisión
-double CalculateLotSize(double sl_dist_price) {
-   if(!InpUseAutoRiskPercent) return g_lot_size;
+// [V12.99] Obtener Pérdida Monetaria de 1.0 Lote a la distancia de SL
+double GetOneLotLoss(double sl_dist_price) {
+   if(sl_dist_price <= 0) return 0.0;
+   double ask = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
+   double one_lot_loss = 0.0;
+   if(OrderCalcProfit(ORDER_TYPE_BUY, _Symbol, 1.0, ask, ask - sl_dist_price, one_lot_loss)) {
+      one_lot_loss = MathAbs(one_lot_loss);
+   }
+   if(one_lot_loss <= 0) {
+      double contract  = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_CONTRACT_SIZE);
+      if(contract <= 0) contract = 100.0;
+      double tick_size = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_SIZE);
+      double tick_val  = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_VALUE);
+      if(tick_size > 0 && tick_val > 0) {
+         one_lot_loss = (sl_dist_price / tick_size) * tick_val;
+      } else {
+         one_lot_loss = sl_dist_price * contract;
+      }
+   }
+   return one_lot_loss;
+}
+
+//+------------------------------------------------------------------+
+// [V12.99] Cálculo de Lotaje y Gestión de Riesgo por Trade con Microlotes
+double CalculateLotSize(double sl_dist_price, double &actual_risk_usd, double &actual_risk_pct) {
+   actual_risk_usd = 0.0;
+   actual_risk_pct = 0.0;
+   double min_vol = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN);
+   if(min_vol <= 0) min_vol = 0.01;
+
+   if(!InpUseAutoRiskPercent) {
+      double chosen_lot = NormalizeLotVolume(g_lot_size);
+      double one_loss = GetOneLotLoss(sl_dist_price);
+      actual_risk_usd = one_loss * chosen_lot;
+      double eq = AccountInfoDouble(ACCOUNT_EQUITY);
+      actual_risk_pct = (eq > 0) ? (actual_risk_usd / eq) * 100.0 : 0.0;
+      return chosen_lot;
+   }
+
    double equity = AccountInfoDouble(ACCOUNT_EQUITY);
-   if(equity <= 0 || sl_dist_price <= 0) return g_lot_size;
+   if(equity <= 0 || sl_dist_price <= 0) return min_vol;
 
    // [V12.7] Reducir riesgo tras pérdidas consecutivas (anti-cascade)
    double effective_risk = InpRiskPercent;
@@ -412,38 +465,35 @@ double CalculateLotSize(double sl_dist_price) {
    if(g_consecutive_losses >= 3) effective_risk *= 0.5;  // 25% del riesgo tras 3+ losses
    double risk_amount = equity * (effective_risk / 100.0);
 
-   double ask = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
-   double one_lot_loss = 0.0;
-   
-   // Consulta nativa del motor de cálculo de MT5
-   if(OrderCalcProfit(ORDER_TYPE_BUY, _Symbol, 1.0, ask, ask - sl_dist_price, one_lot_loss)) {
-      one_lot_loss = MathAbs(one_lot_loss);
+   double one_lot_loss = GetOneLotLoss(sl_dist_price);
+   if(one_lot_loss <= 0) return min_vol;
+
+   double min_lot_loss = one_lot_loss * min_vol;
+   double min_lot_risk_pct = (min_lot_loss / equity) * 100.0;
+
+   // Si la protección estricta está habilitada y el lote mínimo supera el riesgo máximo permitido:
+   if(InpStrictRiskProtection && min_lot_risk_pct > InpMaxAllowedRiskPercent) {
+      PrintFormat("[BLOQUEO RIESGO V12.99] Lote min %.2f en %s arriesga $%.2f (%.1f%% > Max %.1f%%). Trade cancelado por seguridad de capital ($%.2f).",
+                  min_vol, _Symbol, min_lot_loss, min_lot_risk_pct, InpMaxAllowedRiskPercent, equity);
+      return 0.0;
    }
 
-   // Fallback con tamaño de contrato si OrderCalcProfit no devuelve valor positivo
-   if(one_lot_loss <= 0) {
-      double contract = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_CONTRACT_SIZE);
-      if(contract <= 0) contract = 100.0;
-      double tick_size  = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_SIZE);
-      double tick_val   = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_VALUE);
-      if(tick_size > 0 && tick_val > 0) {
-         one_lot_loss = (sl_dist_price / tick_size) * tick_val;
-      } else {
-         one_lot_loss = sl_dist_price * contract;
+   double raw_lot  = risk_amount / one_lot_loss;
+   double final_lot = NormalizeLotVolume(raw_lot);
+   actual_risk_usd = one_lot_loss * final_lot;
+   actual_risk_pct = (actual_risk_usd / equity) * 100.0;
+
+   // Advertencia educativa si el lote mínimo excede el porcentaje deseado por capital reducido
+   if(final_lot == min_vol && min_lot_risk_pct > (effective_risk * 1.5)) {
+      static datetime last_risk_warn = 0;
+      if(TimeCurrent() - last_risk_warn >= 120) {
+         PrintFormat("[AVISO CAPITAL/LOTAJE] %s: Lote min %.2f arriesga $%.2f (%.1f%%). Target: %.1f%% ($%.2f). Para arriesgar menos usa cuenta Micro (%smicro) o pares Forex.",
+                     _Symbol, min_vol, actual_risk_usd, actual_risk_pct, effective_risk, risk_amount, _Symbol);
+         last_risk_warn = TimeCurrent();
       }
    }
 
-   if(one_lot_loss <= 0) return g_lot_size;
-
-   double raw_lot  = risk_amount / one_lot_loss;
-   double min_vol  = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN);
-   double max_vol  = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MAX);
-   double step_vol = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_STEP);
-
-   if(step_vol > 0)
-      raw_lot = MathFloor((raw_lot - min_vol) / step_vol + 0.000001) * step_vol + min_vol;
-   raw_lot = MathMax(min_vol, MathMin(max_vol, raw_lot));
-   return NormalizeDouble(raw_lot, 2);
+   return final_lot;
 }
 
 //+------------------------------------------------------------------+
@@ -711,14 +761,15 @@ void OnTick() {
       double sl = NormalizeDouble(ask - sl_dist, _Digits);
       double tp = NormalizeDouble(ask + tp_dist, _Digits);
       CheckStops(sl, tp, true);
-      double trade_lot = CalculateLotSize(sl_dist);
-      if(trade.Buy(trade_lot, _Symbol, ask, sl, tp, "Aurum V12 Sniper")) {
-         g_daily_trades++;
-         Print("[COMPRA] Lote:",DoubleToString(trade_lot,2)," SL:",DoubleToString(sl,_Digits)," TP:",DoubleToString(tp,_Digits),
-               " SL_dist:$",DoubleToString(sl_dist,2)," (",DoubleToString(sl_dist/_Point,0)," pts)",
-               " ATR:",DoubleToString(atr,2)," R:R 1:",DoubleToString(g_risk_reward,1),
-               " Risk:",DoubleToString(InpRiskPercent,1),"%",
-               (g_consecutive_losses >= 2 ? " [ANTI-CASCADE]": ""));
+      double actual_risk_usd = 0, actual_risk_pct = 0;
+      double trade_lot = CalculateLotSize(sl_dist, actual_risk_usd, actual_risk_pct);
+      if(trade_lot > 0) {
+         if(trade.Buy(trade_lot, _Symbol, ask, sl, tp, "Aurum V12 Sniper")) {
+            g_daily_trades++;
+            PrintFormat("[COMPRA] Lote:%.2f SL:%.2f TP:%.2f | Riesgo: -$%.2f (%.1f%%) | SL_dist:$%.2f (%.0f pts) | ATR:%.2f | R:R 1:%.1f%s",
+                        trade_lot, sl, tp, actual_risk_usd, actual_risk_pct, sl_dist, sl_dist/_Point, atr, g_risk_reward,
+                        (g_consecutive_losses >= 2 ? " [ANTI-CASCADE]": ""));
+         }
       }
    }
    if(trend_bear && sell_zone_ok && rsi > eff_rsi_overbought && adx > g_adx_threshold && !is_spike_sell && !usd_corr_blocked_sell) {
@@ -728,14 +779,15 @@ void OnTick() {
       double sl = NormalizeDouble(bid + sl_dist, _Digits);
       double tp = NormalizeDouble(bid - tp_dist, _Digits);
       CheckStops(sl, tp, false);
-      double trade_lot = CalculateLotSize(sl_dist);
-      if(trade.Sell(trade_lot, _Symbol, bid, sl, tp, "Aurum V12 Sniper")) {
-         g_daily_trades++;
-         Print("[VENTA] Lote:",DoubleToString(trade_lot,2)," SL:",DoubleToString(sl,_Digits)," TP:",DoubleToString(tp,_Digits),
-               " SL_dist:$",DoubleToString(sl_dist,2)," (",DoubleToString(sl_dist/_Point,0)," pts)",
-               " ATR:",DoubleToString(atr,2)," R:R 1:",DoubleToString(g_risk_reward,1),
-               " Risk:",DoubleToString(InpRiskPercent,1),"%",
-               (g_consecutive_losses >= 2 ? " [ANTI-CASCADE]": ""));
+      double actual_risk_usd = 0, actual_risk_pct = 0;
+      double trade_lot = CalculateLotSize(sl_dist, actual_risk_usd, actual_risk_pct);
+      if(trade_lot > 0) {
+         if(trade.Sell(trade_lot, _Symbol, bid, sl, tp, "Aurum V12 Sniper")) {
+            g_daily_trades++;
+            PrintFormat("[VENTA] Lote:%.2f SL:%.2f TP:%.2f | Riesgo: -$%.2f (%.1f%%) | SL_dist:$%.2f (%.0f pts) | ATR:%.2f | R:R 1:%.1f%s",
+                        trade_lot, sl, tp, actual_risk_usd, actual_risk_pct, sl_dist, sl_dist/_Point, atr, g_risk_reward,
+                        (g_consecutive_losses >= 2 ? " [ANTI-CASCADE]": ""));
+         }
       }
    }
 }
@@ -1194,7 +1246,20 @@ void UpdateDashboard() {
    if(adx > g_adx_threshold) { adx_txt += " (ACTIVO)"; adx_clr = clrLime; } else adx_txt += " (DORMIDO)";
    DrawLabel("lbl_ADX", adx_txt, 20, y, adx_clr, 10); y += 20;
    DrawLabel("lbl_Partials","Parciales hoy: "+IntegerToString(ArraySize(g_partial_closed_tickets)),20,y,clrSilver,10); y += 20;
-   
+
+   // [V12.99] Monitoreo de Riesgo Monetario por Lote Mínimo
+   double min_vol_dash = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN);
+   double contract_dash = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_CONTRACT_SIZE);
+   double sample_sl_dash = (g_min_sl_price > 0) ? g_min_sl_price : (g_atr_cache > 0 ? g_atr_cache * g_atr_multiplier : 100 * _Point);
+   double min_risk_usd = GetOneLotLoss(sample_sl_dash) * min_vol_dash;
+   double cur_equity_dash = AccountInfoDouble(ACCOUNT_EQUITY);
+   double min_risk_pct = (cur_equity_dash > 0) ? (min_risk_usd / cur_equity_dash) * 100.0 : 0.0;
+   bool is_micro_dash = (contract_dash <= 10.0 || StringFind(_Symbol, "micro") >= 0);
+   string risk_status_txt = StringFormat("Riesgo Lote Mín (%.2f): $%.2f (%.1f%%) [%s]",
+                                         min_vol_dash, min_risk_usd, min_risk_pct,
+                                         (is_micro_dash ? "MICRO" : "ESTANDAR"));
+   DrawLabel("lbl_LotRisk", risk_status_txt, 20, y, (min_risk_pct > InpMaxAllowedRiskPercent ? clrOrange : clrLime), 10); y += 20;
+
    if(InpBlockCorrelatedUSDRisk) {
       DrawLabel("lbl_USDCorr", "Filtro USD Corr: PROTEGIDO (Max 1R activo)", 20, y, clrDeepSkyBlue, 10); y += 20;
    } else {
