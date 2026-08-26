@@ -388,6 +388,9 @@ void OnDeinit(const int reason) {
 void OnTradeTransaction(const MqlTradeTransaction& trans,
                         const MqlTradeRequest& request,
                         const MqlTradeResult& result) {
+   if(trans.type == TRADE_TRANSACTION_DEAL_ADD || trans.type == TRADE_TRANSACTION_POSITION) {
+      GestionarPosicionesPro();
+   }
    if(trans.type != TRADE_TRANSACTION_DEAL_ADD) return;
    if(trans.symbol != _Symbol) return;
    if(HistoryDealSelect(trans.deal)) {
@@ -792,7 +795,10 @@ void OnTick() {
    }
 }
 
-void OnTimer() { UpdateDashboard(); }
+void OnTimer() {
+   GestionarPosicionesPro();
+   UpdateDashboard();
+ }
 
 //+------------------------------------------------------------------+
 // [OPT #5] IsInZone recibe atr_val como parametro
