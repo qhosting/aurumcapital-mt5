@@ -829,13 +829,74 @@ bool CheckLiquidityTrap(string direction) {
 }
 
 //+------------------------------------------------------------------+
+// [V12.99] Distancia SL/TP para Trades Manuales en Cualquier Activo
+double GetManualAssetSLDist(string symbol, double &tp_ratio) {
+   tp_ratio = InpRiskReward;
+   string sym = symbol; StringToUpper(sym);
+   double pt = SymbolInfoDouble(symbol, SYMBOL_POINT);
+   if(pt <= 0) pt = 0.0001;
+
+   // Oro / Metales
+   if(StringFind(sym, "XAU") >= 0 || StringFind(sym, "GOLD") >= 0) {
+      return (InpGoldMinSL > 0) ? InpGoldMinSL : 6.0;
+   }
+   // Forex
+   if(StringFind(sym, "EURUSD") >= 0) return 250 * pt; // 25 pips
+   if(StringFind(sym, "USDJPY") >= 0) return 300 * pt; // 30 pips
+   if(StringFind(sym, "GBPUSD") >= 0) return 350 * pt; // 35 pips
+   // Cripto
+   if(StringFind(sym, "BTC") >= 0 || StringFind(sym, "BITCOIN") >= 0) return 300.0;
+   if(StringFind(sym, "ETH") >= 0 || StringFind(sym, "ETHEREUM") >= 0) return 25.0;
+   // Indices
+   if(StringFind(sym, "US30") >= 0 || StringFind(sym, "WS30") >= 0) return 100.0;
+   if(StringFind(sym, "NAS100") >= 0 || StringFind(sym, "USTEC") >= 0) return 50.0;
+   
+   return 300 * pt;
+}
+
+//+------------------------------------------------------------------+
 void GestionarPosicionesPro() {
    for(int i = PositionsTotal() - 1; i >= 0; i--) {
       ulong ticket = PositionGetTicket(i);
       if(ticket <= 0 || !PositionSelectByTicket(ticket)) continue;
       long pos_magic = PositionGetInteger(POSITION_MAGIC);
       if(pos_magic != MAGIC_NUMBER && !InpManageManualTrades) continue;
-      if(PositionGetString(POSITION_SYMBOL) != _Symbol) continue;
+      
+      string pos_sym = PositionGetString(POSITION_SYMBOL);
+      bool is_current_symbol = (pos_sym == _Symbol);
+
+      // [V12.99] Protección Multidivisa de Trades Manuales:
+      // Si el trade manual se abrió en otro activo (ej. USDJPY) mientras el bot está en GOLD
+      if(!is_current_symbol) {
+         if(pos_magic == MAGIC_NUMBER) continue; // Posiciones automáticas de otro chart las maneja su instancia
+         if(InpAutoSetManualSLTP) {
+            double pos_sl = PositionGetDouble(POSITION_SL);
+            double pos_tp = PositionGetDouble(POSITION_TP);
+            if(pos_sl == 0 || pos_tp == 0) {
+               double pos_entry = PositionGetDouble(POSITION_PRICE_OPEN);
+               long pos_type = PositionGetInteger(POSITION_TYPE);
+               int pos_digits = (int)SymbolInfoInteger(pos_sym, SYMBOL_DIGITS);
+               double pos_point = SymbolInfoDouble(pos_sym, SYMBOL_POINT);
+               double tp_mult = 3.0;
+               double sl_dist_manual = GetManualAssetSLDist(pos_sym, tp_mult);
+               double tp_dist_manual = sl_dist_manual * tp_mult;
+
+               double new_sl = pos_sl;
+               double new_tp = pos_tp;
+               if(pos_type == POSITION_TYPE_BUY) {
+                  if(new_sl == 0) new_sl = NormalizeDouble(pos_entry - sl_dist_manual, pos_digits);
+                  if(new_tp == 0) new_tp = NormalizeDouble(pos_entry + tp_dist_manual, pos_digits);
+               } else if(pos_type == POSITION_TYPE_SELL) {
+                  if(new_sl == 0) new_sl = NormalizeDouble(pos_entry + sl_dist_manual, pos_digits);
+                  if(new_tp == 0) new_tp = NormalizeDouble(pos_entry - tp_dist_manual, pos_digits);
+               }
+               if(trade.PositionModify(ticket, new_sl, new_tp)) {
+                  PrintFormat("[AUTO-SL/TP MULTIDIVISA] Ticket %d %s | SL=%s TP=%s", ticket, pos_sym, DoubleToString(new_sl, pos_digits), DoubleToString(new_tp, pos_digits));
+               }
+            }
+         }
+         continue;
+      }
 
       double entry     = PositionGetDouble(POSITION_PRICE_OPEN);
       double sl        = PositionGetDouble(POSITION_SL);
@@ -847,7 +908,7 @@ void GestionarPosicionesPro() {
       double profit_price = (type == POSITION_TYPE_BUY) ? (cur_price - entry) : (entry - cur_price);
       double profit_puntos = profit_price / _Point;
 
-      // Auto SL/TP si se abrió manual sin ellos
+      // Auto SL/TP si se abrió manual sin ellos en el símbolo actual
       if(InpAutoSetManualSLTP && (sl == 0 || tp == 0)) {
          double atr_val = (hATR != INVALID_HANDLE && g_atr_0_cache > 0) ? g_atr_0_cache : 0;
          double sl_dist = (atr_val > 0) ? (atr_val * g_atr_multiplier) : (g_distancia_puntos * _Point * 2.0);
