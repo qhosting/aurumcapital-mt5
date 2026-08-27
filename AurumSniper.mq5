@@ -1,39 +1,36 @@
 //+------------------------------------------------------------------+
-//|                                           AurumSniper_V12.mq5   |
+//|                                           AurumSniper_V13.mq5   |
 //|                    Copyright 2026, Aurum Capital                 |
-//|   V12.99 - M5 Fast Scalper (TP1 0.6R / TP2 1.5R / TP3 3.0R)      |
+//|   V13.40 - Price Action Reversal & Absorption Confirmation Pro   |
 //+------------------------------------------------------------------+
-// CHANGELOG V12.99:
-//  [V12.99] OPTIMIZACION M5/M1 FAST SCALPER & MULTI-FASE DINAMICA:
-//          - InpStep1_TriggerR = 0.6R: Disparo rápido de Break-Even y Toma Parcial (50%) en el primer impulso M5.
-//          - InpStep2_TriggerR = 1.5R / InpStep2_LockR = 0.8R: Captura de liquidez estructural realista en M5.
-//          - InpStep3_TriggerR = 3.0R / InpStep3_LockR = 1.8R: Modo Runner / Cierre total en extensiones fuertes.
-//  [V12.98] FILTRO DE SESIONES DE ALTA LIQUIDEZ CDMX (KILLZONES LONDRES + NY):
-//          - InpUseHighLiquiditySession: Activo (true) por defecto (01:00 AM a 12:00 PM CDMX).
-//          - Bloquea operaciones en sesión asiática nocturna y domingos noche en Forex/Oro/Índices.
-//          - InpSessionFilterForexOnly: Mantiene Cripto (BTC/ETH) 24/7 libre en cualquier sesión.
-//  [V12.97] CIERRE TOTAL EN TP3 (TAKE PROFIT 3 EXIT):
-//          - InpCloseOnTP3: Cierra el 100% de la posición restante al tocar el nivel TP3 (+3.0R).
+// CHANGELOG V13.40:
+//  [V13.40] CONFIRMACION DE ACCION DEL PRECIO Y ABSORCION:
+//          - CheckPriceActionConfirmation(): Exige vela de giro o mecha de absorción en soporte/resistencia antes de disparar.
+//          - CheckMicroTrigger(): Filtro estricto en M1 que previene compras prematuras mientras la vela sigue cayendo.
+//          - Eliminación de entradas anticipadas durante la formación de la mecha de la vela M15.
+//  [V13.35] CALIBRACION ARMONICA SWEET SPOT (GOLD M15):
+//          - InpStep1_TriggerR = 0.8R: Disparo Fase 1 en el Sweet Spot (+0.8R) asegurando el 50% y pasando a BE.
+//          - InpPartialPercent = 50.0%: 50% de parcial al primer impulso y 50% para el gran runner a TP3 (+3.0R).
 //+------------------------------------------------------------------+
 #property copyright "Aurum Capital"
-#property version   "12.99"
+#property version   "13.40"
 #property strict
 
 #include <Trade\Trade.mqh>
 
 // ==================== INPUTS ====================
-input group "=== GESTION DE RIESGO AVANZADA (V12.99) ==="
+input group "=== GESTION DE RIESGO AVANZADA (V13.35) ==="
 input double   InpLotSize                 = 0.01;
 input bool     InpUseAutoRiskPercent      = true;
 input double   InpRiskPercent             = 1.0; // Arriesga exactamente el 1.0% del capital
-input double   InpMaxAllowedRiskPercent   = 5.0; // [V12.99] Riesgo Máximo Permitido por Trade (% del capital)
-input bool     InpStrictRiskProtection    = false;// [V12.99] Bloquear trade si el lote mínimo excede el Riesgo Máximo
+input double   InpMaxAllowedRiskPercent   = 5.0; // [V13.35] Riesgo Máximo Permitido por Trade (% del capital)
+input bool     InpStrictRiskProtection    = false;// [V13.35] Bloquear trade si el lote mínimo excede el Riesgo Máximo
 input double   InpMaxDailyLoss            = 3.0;
 input bool     InpAutoDailyReset          = true;
 
-input group "=== AUTO-TUNING POR ACTIVO (V12.99) ==="
+input group "=== AUTO-TUNING POR ACTIVO (V13.35) ==="
 input bool     InpAutoGoldSettings        = true;
-input double   InpGoldMinSL               = 6.0;  // [V12.99] SL Mínimo para Oro ($6.00 = 600 pts en M5 Scalp)
+input double   InpGoldMinSL               = 10.0; // [V13.35] SL Mínimo para Oro ($10.00 = 1000 pts en M15)
 input bool     InpAutoForexSettings       = true;
 input bool     InpAutoCryptoSettings      = true;
 input bool     InpAutoIndexSettings       = true;
@@ -53,24 +50,25 @@ input int      InpRSIOverbought      = 60;
 input int      InpRSIOversold        = 42;
 input int      InpADXThreshold       = 15;
 
-input group "=== GESTION DE SALIDA ESCALONADA POR FASES (V12.99 M5) ==="
+input group "=== GESTION DE SALIDA ESCALONADA POR FASES (V13.35 M15) ==="
 input double   InpATRMultiplier      = 2.0;
 input bool     InpUsePartials        = true;
-input double   InpRiskReward         = 3.0; // Ratio Riesgo:Beneficio Inicial (1:3)
+input double   InpPartialPercent     = 50.0;// [V13.35] Porcentaje de Cierre Parcial en Fase 1 (50% del volumen)
+input double   InpRiskReward         = 3.0; // [V13.35] Ratio Riesgo:Beneficio Inicial (1:3.0)
 input int      InpBE_Trigger         = 150;
 input int      InpBE_LockPips        = 10;
 input bool     InpManageManualTrades = true;
 input bool     InpBlockAutoWhenManualOpen = false; // Bloquear auto si hay manual (false = bot opera independiente)
 input bool     InpAutoSetManualSLTP  = true;
 
-input bool     InpUseStepTrailing    = true; // [V12.99] Habilitar Fases (BE 0.6R -> +0.8R -> TP3 3.0R)
-input double   InpStep1_TriggerR     = 0.6;  // [V12.99] Fase 1: Activar Break-Even protegido (+0.6R M5 Fast Scalp)
-input double   InpStep2_TriggerR     = 1.5;  // [V12.99] Fase 2: Al tocar (+1.5R), asegurar (+0.8R)
-input double   InpStep2_LockR        = 0.8;  // [V12.99] Fase 2: Ganancia bloqueada (+0.8R)
-input double   InpStep3_TriggerR     = 3.0;  // [V12.99] Fase 3: Nivel de TP3 (+3.0R)
-input double   InpStep3_LockR        = 1.8;  // [V12.99] Fase 3: Ganancia bloqueada (+1.8R si corre)
+input bool     InpUseStepTrailing    = true; // [V13.35] Habilitar Fases (BE 0.8R -> +0.9R -> TP3 3.0R)
+input double   InpStep1_TriggerR     = 0.8;  // [V13.35] Fase 1: Activar Break-Even protegido y 50% Parcial (+0.8R Sweet Spot)
+input double   InpStep2_TriggerR     = 1.6;  // [V13.35] Fase 2: Al tocar (+1.6R), asegurar (+0.9R)
+input double   InpStep2_LockR        = 0.9;  // [V13.35] Fase 2: Ganancia bloqueada (+0.9R)
+input double   InpStep3_TriggerR     = 3.0;  // [V13.35] Fase 3: Nivel de TP3 (+3.0R)
+input double   InpStep3_LockR        = 1.8;  // [V13.35] Fase 3: Ganancia bloqueada (+1.8R si corre)
 input bool     InpCloseOnTP3         = true; // [V12.97] Cerrar 100% de la posición en TP3 (+3.0R)
-input bool     InpStepRunnerAbove3R  = false;// [V12.9] Runner infinito sobre 3R (solo si InpCloseOnTP3 = false)
+input bool     InpStepRunnerAbove3R  = false;// [V12.9] Runner infinito sobre 3.0R (solo si InpCloseOnTP3 = false)
 
 input bool     InpUseTrailingStop    = false; // Trailing Stop continuo clásico (false si se usan Fases)
 input bool     InpUseATRTrailing     = true;
@@ -79,10 +77,11 @@ input int      InpTrailingStep       = 20;
 input int      InpMaxDailyTrades     = 16;
 input bool     InpUseLiquidityTraps  = true;
 
-input group "=== FILTROS DE SEGURIDAD Y SESION (V12.98) ==="
+input group "=== FILTROS DE SEGURIDAD Y SESION (V13.00) ==="
 input int      InpCooldownBars             = 2;
-input bool     InpUseHighLiquiditySession  = true; // [V12.98] Operar solo en Sesiones de Alta Liquidez (Londres + NY)
-input int      InpSessionStartHourCDMX     = 1;    // Hora Inicio CDMX (01:00 AM - Apertura Londres)
+input bool     InpUseHighLiquiditySession  = true; // [V13.00] Operar solo en Sesiones de Alta Liquidez (Londres + NY)
+input int      InpSessionStartHourCDMX     = 1;    // Hora Inicio CDMX (01:00 AM)
+input int      InpSessionStartMinCDMX      = 15;   // Minuto Inicio CDMX (01:15 AM - Evita Rollover de Broker)
 input int      InpSessionEndHourCDMX       = 12;   // Hora Cierre CDMX (12:00 PM - Fin Golden Overlap)
 input bool     InpSessionFilterForexOnly   = true; // Aplicar a Forex, Metales e Índices (Cripto 24/7 libre)
 input bool     InpUseFridayFilter          = true; // [V12.96] Filtro Especial de Viernes (Horario CDMX)
@@ -100,9 +99,14 @@ input bool            InpUseMTFFilter      = true;
 input ENUM_TIMEFRAMES InpHTFTimeframe      = PERIOD_H4;
 input bool            InpUseEMAInclinacion = true;
 
+input group "=== MICRO-GATILLO MULTITEMPORAL (V13.10) ==="
+input bool            InpUseMicroTrigger       = true;       // [V13.10] Confirmación de Giro en Temporalidad Menor (M1)
+input ENUM_TIMEFRAMES InpMicroTriggerTimeframe = PERIOD_M1;  // [V13.10] Temporalidad del Gatillo Sniper (M1)
+input int             InpMicroTriggerEMA       = 9;          // [V13.10] Periodo EMA Rápida Micro-Gatillo
+
 // ==================== GLOBALES ====================
 CTrade trade;
-int hMA, hMA_HTF, hRSI, hADX, hATR;
+int hMA, hMA_HTF, hMA_Micro = INVALID_HANDLE, hRSI, hADX, hATR;
 double   g_start_equity   = 0;
 datetime g_last_reset_day = 0;
 int      g_daily_trades   = 0;
@@ -123,9 +127,16 @@ bool   g_gold_mode_active = false;
 double g_momentum_spike_multiplier;
 double g_risk_reward;
 double g_min_sl_price = 0; // SL minimo en precio (0 = solo ATR). Para ORO = $15.00
+double g_step1_trigger_r = 1.0;
+double g_step2_trigger_r = 1.8;
+double g_step2_lock_r    = 1.0;
+double g_step3_trigger_r = 3.5;
+double g_step3_lock_r    = 2.2;
+double g_partial_percent = 50.0;
 
 // [OPT #3] Cache de Indicadores
 double g_ma_h1_cache      = 0;
+double g_ma_h1_p2_cache   = 0;
 double g_ma_htf_cache     = 0;
 double g_ma_htf_p2_cache  = 0;
 double g_rsi_cache        = 0;
@@ -172,17 +183,34 @@ void AutoTuneAssets() {
    g_rsi_overbought = InpRSIOverbought; g_rsi_oversold = InpRSIOversold;
    g_gold_mode_active = false; g_momentum_spike_multiplier = 3.0; g_risk_reward = InpRiskReward;
    g_min_sl_price = 0; // Default: sin minimo para Forex
+   g_step1_trigger_r = InpStep1_TriggerR;
+   g_step2_trigger_r = InpStep2_TriggerR;
+   g_step2_lock_r    = InpStep2_LockR;
+   g_step3_trigger_r = InpStep3_TriggerR;
+   g_step3_lock_r    = InpStep3_LockR;
+   g_partial_percent = InpPartialPercent;
+
    if(InpAutoGoldSettings) {
       string symbol = _Symbol; StringToUpper(symbol);
-      if(StringFind(symbol,"XAU") >= 0 || StringFind(symbol,"GOLD") >= 0) {
+      if(StringFind(symbol,"XAU") >= 0 || StringFind(symbol,"GOLD") >= 0 || StringFind(symbol,"MGC") >= 0) {
          g_gold_mode_active = true;
          g_lot_size = (!InpUseAutoRiskPercent && InpLotSize > 0.01) ? InpLotSize : 0.01;
-         g_max_spread = 75; g_distancia_puntos = 600; g_be_trigger = 600; // [V12.9] BE Trigger equilibrado en puntos
-         g_adx_threshold = 20; g_atr_multiplier = 2.0; g_risk_reward = 3.0;
+         g_max_spread = 75;
+         g_distancia_puntos = (_Period >= PERIOD_M15) ? 900 : 700; // [V13.35] Adaptativo M15/M5
+         g_be_trigger = (_Period >= PERIOD_M15) ? 900 : 700;
+         g_adx_threshold = 20; g_atr_multiplier = 2.0;
+         g_risk_reward = 3.0;
+         g_step1_trigger_r = 0.8; // [V13.35] Sweet Spot +0.8R (captura el 60% de los giros)
+         g_step2_trigger_r = 1.6;
+         g_step2_lock_r    = 0.9;
+         g_step3_trigger_r = 3.0;
+         g_step3_lock_r    = 1.8;
+         g_partial_percent = 50.0;
          g_rsi_oversold = 38; g_rsi_overbought = 62;
          g_momentum_spike_multiplier = 4.5;
-         g_min_sl_price = (InpGoldMinSL > 0) ? InpGoldMinSL : 6.0; // [V12.99] SL optimizado $6.00 (600 pts) en M5
-         PrintFormat("AURUM GOLD MODE V12.99 ACTIVE: ATR x2.0, R:R 1:3, Multi-Phase Trailing (BE 0.6R), SL min $%.2f", g_min_sl_price);
+         g_min_sl_price = MathMax(InpGoldMinSL, (_Period >= PERIOD_M15 ? 10.0 : 8.0)); // [V13.35]
+         PrintFormat("AURUM GOLD & MICRO-GOLD MODE V13.35 ACTIVE (%s): ATR x2.0, R:R 1:%.1f, Fases (BE %.1fR -> 1.6R -> 3.0R), SL min $%.2f, Parcial %.0f%%",
+                     EnumToString(_Period), g_risk_reward, g_step1_trigger_r, g_min_sl_price, g_partial_percent);
       }
    }
    if(InpAutoForexSettings) {
@@ -284,7 +312,7 @@ void UpdateATRCache() {
 }
 void UpdateIndicatorCache() {
    double b[]; ArraySetAsSeries(b, true);
-   if(CopyBuffer(hMA,     0, 0, 1, b) > 0) g_ma_h1_cache = b[0];
+   if(CopyBuffer(hMA,     0, 0, 3, b) > 0) { g_ma_h1_cache = b[0]; g_ma_h1_p2_cache = b[2]; }
    if(CopyBuffer(hMA_HTF, 0, 0, 3, b) > 0) { g_ma_htf_cache = b[0]; g_ma_htf_p2_cache = b[2]; }
    if(CopyBuffer(hRSI,    0, 0, 2, b) > 0) g_rsi_cache = b[1];
    if(CopyBuffer(hADX,    0, 0, 2, b) > 0) g_adx_cache = b[1];
@@ -320,8 +348,12 @@ int OnInit() {
    hRSI    = iRSI(_Symbol, _Period, 14, PRICE_CLOSE);
    hADX    = iADX(_Symbol, _Period, 14);
    hATR    = iATR(_Symbol, _Period, 14);
+   if(InpUseMicroTrigger) {
+      hMA_Micro = iMA(_Symbol, InpMicroTriggerTimeframe, InpMicroTriggerEMA, 0, MODE_EMA, PRICE_CLOSE);
+   }
    if(hMA == INVALID_HANDLE || hMA_HTF == INVALID_HANDLE ||
-      hRSI == INVALID_HANDLE || hADX == INVALID_HANDLE || hATR == INVALID_HANDLE)
+      hRSI == INVALID_HANDLE || hADX == INVALID_HANDLE || hATR == INVALID_HANDLE ||
+      (InpUseMicroTrigger && hMA_Micro == INVALID_HANDLE))
       return(INIT_FAILED);
    UpdateIndicatorCache();
    RecoverDailyTradeCount();
@@ -352,7 +384,7 @@ int OnInit() {
    if(_Period >= PERIOD_H1)
       Print("[AVISO TEMPORALIDAD] AurumSniper cargado en ", EnumToString(_Period), ". Para operaciones Sniper de alta precision se recomienda M1 o M5.");
    
-   // [V12.99] Diagnóstico de Capital, Contrato y Riesgo por Trade
+   // [V13.10] Diagnóstico de Capital, Contrato y Riesgo por Trade
    double min_vol = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN);
    double contract = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_CONTRACT_SIZE);
    double cur_eq = AccountInfoDouble(ACCOUNT_EQUITY);
@@ -361,24 +393,26 @@ int OnInit() {
    double calc_loss_min_lot = one_lot_loss * min_vol;
    double risk_pct_min_lot = (cur_eq > 0) ? (calc_loss_min_lot / cur_eq) * 100.0 : 0.0;
    
-   bool is_micro_account = (contract <= 10.0 || StringFind(_Symbol, "micro") >= 0 || StringFind(_Symbol, "m") == StringLen(_Symbol)-1);
+   bool is_micro_account = (contract <= 10.0 || StringFind(_Symbol, "micro") >= 0 || StringFind(_Symbol, "m") == StringLen(_Symbol)-1 || StringFind(_Symbol, "MGC") >= 0);
    string acct_type_str = is_micro_account ? "MICRO" : "ESTANDAR";
 
-   PrintFormat("[DIAGNOSTICO V12.99] Simbolo: %s (%s) | Contrato: %.0f | Lote Min: %.2f | Riesgo SL ($%.2f): $%.2f (%.1f%%) | Balance: $%.2f",
-               _Symbol, acct_type_str, contract, min_vol, sample_sl_dist, calc_loss_min_lot, risk_pct_min_lot, cur_eq);
+   PrintFormat("[DIAGNOSTICO V13.40] Simbolo: %s (%s) | Contrato: %.0f | Lote Min: %.2f | Riesgo SL ($%.2f): $%.2f (%.1f%%) | Balance: $%.2f | Micro-Gatillo: %s (%s)",
+               _Symbol, acct_type_str, contract, min_vol, sample_sl_dist, calc_loss_min_lot, risk_pct_min_lot, cur_eq,
+               (InpUseMicroTrigger ? "ON" : "OFF"), EnumToString(InpMicroTriggerTimeframe));
    if(cur_eq > 0 && risk_pct_min_lot > InpMaxAllowedRiskPercent) {
       PrintFormat("[ADVERTENCIA CAPITAL] En cuenta %s, el lote minimo (%.2f) arriesga $%.2f (%.1f%% del capital > Max %.1f%%). Para reducir riesgo a <$1 usar cuenta Micro (%smicro) o pares Forex.",
                   acct_type_str, min_vol, calc_loss_min_lot, risk_pct_min_lot, InpMaxAllowedRiskPercent, _Symbol);
    }
 
    EventSetTimer(1);
-   Print("AURUM V12.99 ULTIMATE Loaded.");
+   Print("AURUM V13.40 ULTIMATE PRO Loaded.");
    return(INIT_SUCCEEDED);
 }
 
 void OnDeinit(const int reason) {
    IndicatorRelease(hMA); IndicatorRelease(hMA_HTF);
    IndicatorRelease(hRSI); IndicatorRelease(hADX); IndicatorRelease(hATR);
+   if(hMA_Micro != INVALID_HANDLE) IndicatorRelease(hMA_Micro);
    EventKillTimer();
    ObjectsDeleteAll(0, "lbl_");
    ObjectsDeleteAll(0, "tp_lvl_");
@@ -500,9 +534,17 @@ double CalculateLotSize(double sl_dist_price, double &actual_risk_usd, double &a
 }
 
 //+------------------------------------------------------------------+
-// [V12.98] Filtro de Horario de Trading con soporte de Killzones CDMX (Londres + NY)
+// [V13.00] Filtro de Horario de Trading con soporte de Killzones CDMX y Rollover Guard
 bool IsTradingSession(string &session_reason) {
    session_reason = "";
+   
+   // [V13.00] Protección contra Mercado Cerrado o Trading Deshabilitado por el Broker
+   long trade_mode = SymbolInfoInteger(_Symbol, SYMBOL_TRADE_MODE);
+   if(trade_mode == SYMBOL_TRADE_MODE_DISABLED || trade_mode == SYMBOL_TRADE_MODE_CLOSEONLY) {
+      session_reason = "[Mercado Cerrado/Solo Cierre por Broker]";
+      return false;
+   }
+
    MqlDateTime dt_local;
    TimeLocal(dt_local);
    
@@ -512,27 +554,33 @@ bool IsTradingSession(string &session_reason) {
       is_crypto = true;
    }
 
-   // [V12.98] Filtro de Sesiones de Alta Liquidez CDMX (Londres + NY: 01:00 a 12:00 CDMX)
-   // Bloquea sesión asiática nocturna (20:00 - 00:59) y aperturas dominicales en Forex/Oro/Índices
+   int current_min_of_day = dt_local.hour * 60 + dt_local.min;
+
+   // [V13.00] Filtro de Sesiones de Alta Liquidez CDMX (Londres + NY: 01:15 a 12:00 CDMX)
+   // Bloquea sesión asiática nocturna (20:00 - 01:14) y aperturas dominicales en Forex/Oro/Índices
    if(InpUseHighLiquiditySession && (!is_crypto || !InpSessionFilterForexOnly)) {
       // Bloqueo total en domingos (day 0) para Forex/Metales/Índices (aperturas con spreads erráticos)
       if(dt_local.day_of_week == 0) {
          session_reason = "[Fin de Semana / Domingo Forex Cerrado]";
          return false;
       }
-      if(dt_local.hour < InpSessionStartHourCDMX || dt_local.hour >= InpSessionEndHourCDMX) {
-         session_reason = StringFormat("[Fuera Killzone CDMX (%02d:00-%02d:00, Actual %02d:%02d)]",
-                                       InpSessionStartHourCDMX, InpSessionEndHourCDMX, dt_local.hour, dt_local.min);
+      int start_min = InpSessionStartHourCDMX * 60 + InpSessionStartMinCDMX;
+      int end_min   = InpSessionEndHourCDMX * 60;
+      if(current_min_of_day < start_min || current_min_of_day >= end_min) {
+         session_reason = StringFormat("[Fuera Killzone CDMX (%02d:%02d-%02d:00, Actual %02d:%02d)]",
+                                       InpSessionStartHourCDMX, InpSessionStartMinCDMX, InpSessionEndHourCDMX, dt_local.hour, dt_local.min);
          return false;
       }
    }
    
-   // [V12.96] Filtro Especial de Viernes en Horario CDMX (01:00 - 11:00 CDMX)
+   // [V13.00] Filtro Especial de Viernes en Horario CDMX (01:15 - 11:00 CDMX)
    if(InpUseFridayFilter && dt_local.day_of_week == 5) {
       if(!is_crypto || !InpFridayFilterForexOnly) {
-         if(dt_local.hour < InpFridayStartHourCDMX || dt_local.hour >= InpFridayEndHourCDMX) {
-            session_reason = StringFormat("[Viernes Cierre CDMX (%02d:00-%02d:00, Actual %02d:%02d)]",
-                                          InpFridayStartHourCDMX, InpFridayEndHourCDMX, dt_local.hour, dt_local.min);
+         int fri_start_min = InpFridayStartHourCDMX * 60 + InpSessionStartMinCDMX;
+         int fri_end_min   = InpFridayEndHourCDMX * 60;
+         if(current_min_of_day < fri_start_min || current_min_of_day >= fri_end_min) {
+            session_reason = StringFormat("[Viernes Cierre CDMX (%02d:%02d-%02d:00, Actual %02d:%02d)]",
+                                          InpFridayStartHourCDMX, InpSessionStartMinCDMX, InpFridayEndHourCDMX, dt_local.hour, dt_local.min);
             return false;
          }
       }
@@ -598,13 +646,101 @@ bool IsInDiscountPremiumZone(string type) {
 }
 
 //+------------------------------------------------------------------+
+// [V13.40] Confirmación de Acción del Precio (Vela de Giro y Absorción)
+bool CheckPriceActionConfirmation(string direction, string &pa_reason) {
+   pa_reason = "";
+   double open1  = iOpen(_Symbol,  _Period, 1);
+   double close1 = iClose(_Symbol, _Period, 1);
+   double high1  = iHigh(_Symbol,  _Period, 1);
+   double low1   = iLow(_Symbol,   _Period, 1);
+   double total_range = high1 - low1;
+   if(total_range <= 0) return true;
+
+   if(direction == "BUY") {
+      double lower_wick = MathMin(open1, close1) - low1;
+      double wick_ratio = lower_wick / total_range;
+      bool is_green_reversal = (close1 > open1);
+      bool is_absorption_pinbar = (wick_ratio >= 0.30); // 30% o más de mecha inferior compradora
+      
+      if(!is_green_reversal && !is_absorption_pinbar) {
+         pa_reason = "[Esperando Giro: Vela 1 aún cayendo sin rechazo]";
+         return false;
+      }
+      return true;
+   }
+   else if(direction == "SELL") {
+      double upper_wick = high1 - MathMax(open1, close1);
+      double wick_ratio = upper_wick / total_range;
+      bool is_red_reversal = (close1 < open1);
+      bool is_absorption_pinbar = (wick_ratio >= 0.30); // 30% o más de mecha superior vendedora
+
+      if(!is_red_reversal && !is_absorption_pinbar) {
+         pa_reason = "[Esperando Giro: Vela 1 aún subiendo sin rechazo]";
+         return false;
+      }
+      return true;
+   }
+   return true;
+}
+
+//+------------------------------------------------------------------+
+// [V13.40] Confirmación de Micro-Gatillo Estricto en M1
+bool CheckMicroTrigger(string direction, string &micro_reason) {
+   micro_reason = "";
+   if(!InpUseMicroTrigger) return true;
+   if(_Period <= InpMicroTriggerTimeframe) return true;
+
+   double micro_c1 = iClose(_Symbol, InpMicroTriggerTimeframe, 1);
+   double micro_o1 = iOpen(_Symbol,  InpMicroTriggerTimeframe, 1);
+   double micro_h1 = iHigh(_Symbol,  InpMicroTriggerTimeframe, 1);
+   double micro_l1 = iLow(_Symbol,   InpMicroTriggerTimeframe, 1);
+   double micro_range = micro_h1 - micro_l1;
+
+   double ma_buf[];
+   ArraySetAsSeries(ma_buf, true);
+   double ma_val = 0;
+   if(hMA_Micro != INVALID_HANDLE && CopyBuffer(hMA_Micro, 0, 1, 1, ma_buf) > 0) {
+      ma_val = ma_buf[0];
+   }
+
+   if(direction == "BUY") {
+      bool bull_close     = (micro_c1 > micro_o1);
+      bool above_ma       = (ma_val > 0) ? (micro_c1 >= ma_val) : true;
+      double lower_wick   = (micro_range > 0) ? ((MathMin(micro_o1, micro_c1) - micro_l1) / micro_range) : 0;
+      bool rejection_wick = (lower_wick >= 0.35);
+
+      // Exige giro real: (Vela verde Y sobre EMA) O (Fuerte mecha de absorción en soporte)
+      if(!((bull_close && above_ma) || rejection_wick)) {
+         micro_reason = "[Micro-Gatillo M1 Aún Cayendo sin Giro Confirmado]";
+         return false;
+      }
+      return true;
+   }
+   else if(direction == "SELL") {
+      bool bear_close     = (micro_c1 < micro_o1);
+      bool below_ma       = (ma_val > 0) ? (micro_c1 <= ma_val) : true;
+      double upper_wick   = (micro_range > 0) ? ((micro_h1 - MathMax(micro_o1, micro_c1)) / micro_range) : 0;
+      bool rejection_wick = (upper_wick >= 0.35);
+
+      // Exige giro real: (Vela roja Y bajo EMA) O (Fuerte mecha de rechazo en resistencia)
+      if(!((bear_close && below_ma) || rejection_wick)) {
+         micro_reason = "[Micro-Gatillo M1 Aún Subiendo sin Giro Confirmado]";
+         return false;
+      }
+      return true;
+   }
+   return true;
+}
+
+//+------------------------------------------------------------------+
 void DebugSignalMiss(string direction, bool trend, bool in_zone,
                      double rsi, double adx, bool is_spike,
                      bool has_open_trade, bool good_spread,
                      bool daily_limit, double eff_rsi_oversold,
                      double eff_rsi_overbought, bool cooldown_ok, bool session_ok,
                      bool discount_ok, bool usd_corr_blocked, string conflict_sym,
-                     string session_reason) {
+                     string session_reason, bool micro_ok, string micro_reason,
+                     bool pa_ok, string pa_reason) {
    if(!in_zone && discount_ok) return;
    double open1  = iOpen(_Symbol,  _Period, 1);
    double close1 = iClose(_Symbol, _Period, 1);
@@ -622,6 +758,8 @@ void DebugSignalMiss(string direction, bool trend, bool in_zone,
       if(usd_corr_blocked)   reason += "[Riesgo USD Duplicado con "+conflict_sym+" (Esperando BE)] ";
       if(!cooldown_ok)       reason += "[Cooldown] ";
       if(!session_ok)        reason += (session_reason != "" ? (session_reason + " ") : "[Fuera Sesion] ");
+      if(!micro_ok)          reason += (micro_reason != "" ? (micro_reason + " ") : "[Micro-Gatillo Pendiente] ");
+      if(!pa_ok)             reason += (pa_reason != "" ? (pa_reason + " ") : "[Esperando Giro PA] ");
       if(reason != "") Print("[X-RAY COMPRA OMITIDA] ", _Symbol, ": ", reason);
    }
    if(direction == "SELL" && close1 < open1) {
@@ -637,12 +775,14 @@ void DebugSignalMiss(string direction, bool trend, bool in_zone,
       if(usd_corr_blocked)   reason += "[Riesgo USD Duplicado con "+conflict_sym+" (Esperando BE)] ";
       if(!cooldown_ok)       reason += "[Cooldown] ";
       if(!session_ok)        reason += (session_reason != "" ? (session_reason + " ") : "[Fuera Sesion] ");
+      if(!micro_ok)          reason += (micro_reason != "" ? (micro_reason + " ") : "[Micro-Gatillo Pendiente] ");
+      if(!pa_ok)             reason += (pa_reason != "" ? (pa_reason + " ") : "[Esperando Giro PA] ");
       if(reason != "") Print("[X-RAY VENTA OMITIDA] ", _Symbol, ": ", reason);
    }
 }
 
 //+------------------------------------------------------------------+
-//| Main Engine V12.96                                               |
+//| Main Engine V13.10                                               |
 //+------------------------------------------------------------------+
 void OnTick() {
    bool new_bar = IsNewBar();
@@ -664,6 +804,11 @@ void OnTick() {
 
    bool trend_bull = (cur_price > ma_h1);
    bool trend_bear = (cur_price < ma_h1);
+
+   if(InpUseEMAInclinacion) {
+      trend_bull = trend_bull && (ma_h1 > g_ma_h1_p2_cache);
+      trend_bear = trend_bear && (ma_h1 < g_ma_h1_p2_cache);
+   }
 
    if(InpUseMTFFilter) {
       bool htf_bull = (cur_price > ma_htf);
@@ -718,6 +863,18 @@ void OnTick() {
    string conflict_sym_sell = "";
    bool usd_corr_blocked_sell = HasUnprotectedCorrelatedUSDPosition(_Symbol, "SELL", conflict_sym_sell);
 
+   // [V13.10] Verificación de Micro-Gatillo M1
+   string micro_reason_buy = "";
+   bool micro_buy_ok = CheckMicroTrigger("BUY", micro_reason_buy);
+   string micro_reason_sell = "";
+   bool micro_sell_ok = CheckMicroTrigger("SELL", micro_reason_sell);
+
+   // [V13.40] Verificación de Acción del Precio (Giro / Absorción en M15)
+   string pa_reason_buy = "";
+   bool pa_buy_ok = CheckPriceActionConfirmation("BUY", pa_reason_buy);
+   string pa_reason_sell = "";
+   bool pa_sell_ok = CheckPriceActionConfirmation("SELL", pa_reason_sell);
+
    if(daily_limit_reached)
       Comment("\nMETA DIARIA ("+IntegerToString(g_daily_trades)+"/"+IntegerToString(InpMaxDailyTrades)+"). HASTA MANANA.");
 
@@ -727,11 +884,13 @@ void OnTick() {
    DebugSignalMiss("BUY",  trend_bull, buy_zone_ok,  rsi, adx, is_spike_buy,
                    has_open_trade, good_spread, daily_limit_reached,
                    eff_rsi_oversold, eff_rsi_overbought, cooldown_ok, session_ok, discount_buy_ok,
-                   usd_corr_blocked_buy, conflict_sym_buy, session_reason);
+                   usd_corr_blocked_buy, conflict_sym_buy, session_reason, micro_buy_ok, micro_reason_buy,
+                   pa_buy_ok, pa_reason_buy);
    DebugSignalMiss("SELL", trend_bear, sell_zone_ok, rsi, adx, is_spike_sell,
                    has_open_trade, good_spread, daily_limit_reached,
                    eff_rsi_oversold, eff_rsi_overbought, cooldown_ok, session_ok, discount_sell_ok,
-                   usd_corr_blocked_sell, conflict_sym_sell, session_reason);
+                   usd_corr_blocked_sell, conflict_sym_sell, session_reason, micro_sell_ok, micro_reason_sell,
+                   pa_sell_ok, pa_reason_sell);
 
    if(has_open_trade || !good_spread || daily_limit_reached || !cooldown_ok || !session_ok) return;
 
@@ -757,7 +916,7 @@ void OnTick() {
       return;
    }
 
-   if(trend_bull && buy_zone_ok && rsi < eff_rsi_oversold && adx > g_adx_threshold && !is_spike_buy && !usd_corr_blocked_buy) {
+   if(trend_bull && buy_zone_ok && rsi < eff_rsi_oversold && adx > g_adx_threshold && !is_spike_buy && !usd_corr_blocked_buy && micro_buy_ok && pa_buy_ok) {
       // [V12.4] SL = maximo entre ATR dinamico y minimo de activo (evita SL demasiado justos)
       double sl_dist = MathMax(atr * g_atr_multiplier, g_min_sl_price);
       double tp_dist = sl_dist * g_risk_reward;
@@ -767,15 +926,16 @@ void OnTick() {
       double actual_risk_usd = 0, actual_risk_pct = 0;
       double trade_lot = CalculateLotSize(sl_dist, actual_risk_usd, actual_risk_pct);
       if(trade_lot > 0) {
-         if(trade.Buy(trade_lot, _Symbol, ask, sl, tp, "Aurum V12 Sniper")) {
+         if(trade.Buy(trade_lot, _Symbol, ask, sl, tp, "Aurum V13 Sniper")) {
             g_daily_trades++;
-            PrintFormat("[COMPRA] Lote:%.2f SL:%.2f TP:%.2f | Riesgo: -$%.2f (%.1f%%) | SL_dist:$%.2f (%.0f pts) | ATR:%.2f | R:R 1:%.1f%s",
+            PrintFormat("[COMPRA] Lote:%.2f SL:%.2f TP:%.2f | Riesgo: -$%.2f (%.1f%%) | SL_dist:$%.2f (%.0f pts) | ATR:%.2f | R:R 1:%.1f%s%s",
                         trade_lot, sl, tp, actual_risk_usd, actual_risk_pct, sl_dist, sl_dist/_Point, atr, g_risk_reward,
+                        (InpUseMicroTrigger ? " [M1-TRIGGER OK]" : ""),
                         (g_consecutive_losses >= 2 ? " [ANTI-CASCADE]": ""));
          }
       }
    }
-   if(trend_bear && sell_zone_ok && rsi > eff_rsi_overbought && adx > g_adx_threshold && !is_spike_sell && !usd_corr_blocked_sell) {
+   if(trend_bear && sell_zone_ok && rsi > eff_rsi_overbought && adx > g_adx_threshold && !is_spike_sell && !usd_corr_blocked_sell && micro_sell_ok && pa_sell_ok) {
       // [V12.4] SL = maximo entre ATR dinamico y minimo de activo
       double sl_dist = MathMax(atr * g_atr_multiplier, g_min_sl_price);
       double tp_dist = sl_dist * g_risk_reward;
@@ -785,10 +945,11 @@ void OnTick() {
       double actual_risk_usd = 0, actual_risk_pct = 0;
       double trade_lot = CalculateLotSize(sl_dist, actual_risk_usd, actual_risk_pct);
       if(trade_lot > 0) {
-         if(trade.Sell(trade_lot, _Symbol, bid, sl, tp, "Aurum V12 Sniper")) {
+         if(trade.Sell(trade_lot, _Symbol, bid, sl, tp, "Aurum V13 Sniper")) {
             g_daily_trades++;
-            PrintFormat("[VENTA] Lote:%.2f SL:%.2f TP:%.2f | Riesgo: -$%.2f (%.1f%%) | SL_dist:$%.2f (%.0f pts) | ATR:%.2f | R:R 1:%.1f%s",
+            PrintFormat("[VENTA] Lote:%.2f SL:%.2f TP:%.2f | Riesgo: -$%.2f (%.1f%%) | SL_dist:$%.2f (%.0f pts) | ATR:%.2f | R:R 1:%.1f%s%s",
                         trade_lot, sl, tp, actual_risk_usd, actual_risk_pct, sl_dist, sl_dist/_Point, atr, g_risk_reward,
+                        (InpUseMicroTrigger ? " [M1-TRIGGER OK]" : ""),
                         (g_consecutive_losses >= 2 ? " [ANTI-CASCADE]": ""));
          }
       }
@@ -959,7 +1120,7 @@ void GestionarPosicionesPro() {
          string phase_name = "";
 
          // FASE 3: TP3 Alcanzado (Cierre Total o Runner)
-         if(profit_R >= InpStep3_TriggerR) {
+         if(profit_R >= g_step3_trigger_r) {
             // [V12.97] Si InpCloseOnTP3 está activo, cerrar 100% de la posición en TP3
             if(InpCloseOnTP3) {
                if(ticket > 0 && PositionSelectByTicket(ticket)) {
@@ -969,7 +1130,7 @@ void GestionarPosicionesPro() {
                   }
                }
             }
-            double locked_dist = InpStep3_LockR * r_dist;
+            double locked_dist = g_step3_lock_r * r_dist;
             if(type == POSITION_TYPE_BUY) {
                target_sl = entry + locked_dist;
                if(InpStepRunnerAbove3R) {
@@ -983,30 +1144,32 @@ void GestionarPosicionesPro() {
                   if(runner_sl < target_sl) target_sl = runner_sl;
                }
             }
-            phase_name = "FASE 3 (3R+ -> SL a +2R / Runner)";
+            phase_name = StringFormat("FASE 3 (%.1fR+ -> SL a +%.1fR / Runner)", g_step3_trigger_r, g_step3_lock_r);
          }
-         // FASE 2: 2R Alcanzado (Bloquea +1R firme)
-         else if(profit_R >= InpStep2_TriggerR) {
-            double locked_dist = InpStep2_LockR * r_dist;
+         // FASE 2: 1.8R Alcanzado (Bloquea +1.0R firme)
+         else if(profit_R >= g_step2_trigger_r) {
+            double locked_dist = g_step2_lock_r * r_dist;
             target_sl = (type == POSITION_TYPE_BUY) ? (entry + locked_dist) : (entry - locked_dist);
-            phase_name = "FASE 2 (2R -> SL a +1R Asegurado)";
+            phase_name = StringFormat("FASE 2 (%.1fR -> SL a +%.1fR Asegurado)", g_step2_trigger_r, g_step2_lock_r);
          }
          // FASE 1: Trigger BE Alcanzado (SL a Break-Even + lock pips)
-         else if(profit_R >= InpStep1_TriggerR) {
+         else if(profit_R >= g_step1_trigger_r) {
             target_sl = (type == POSITION_TYPE_BUY) ? (entry + lock_dist) : (entry - lock_dist);
-            phase_name = StringFormat("FASE 1 (%.1fR/BE -> SL a Entrada Protegida)", InpStep1_TriggerR);
+            phase_name = StringFormat("FASE 1 (%.1fR/BE -> SL a Entrada Protegida)", g_step1_trigger_r);
 
             // Cierre parcial en Fase 1 si está habilitado
             if(InpUsePartials && pos_magic == MAGIC_NUMBER && !IsPartialAlreadyClosed(ticket)) {
                double min_vol  = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN);
                double step_vol = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_STEP);
-               double half_vol = NormalizeDouble(vol / 2.0, 2);
-               double partial  = (step_vol > 0) ? MathFloor(half_vol / step_vol) * step_vol : half_vol;
+               double pct_mult = (g_partial_percent > 0 && g_partial_percent <= 90.0) ? (g_partial_percent / 100.0) : 0.50;
+               double calc_vol = NormalizeDouble(vol * pct_mult, 2);
+               double partial  = (step_vol > 0) ? MathFloor(calc_vol / step_vol) * step_vol : calc_vol;
                if(partial >= min_vol && (vol - partial) >= min_vol) {
                   if(ticket > 0 && PositionSelectByTicket(ticket)) {
                      if(trade.PositionClosePartial(ticket, partial)) {
                         MarkPartialClosed(ticket);
-                        Print("[PARCIAL Ticket ",ticket,"] Vol:",DoubleToString(partial,2));
+                        PrintFormat("[PARCIAL Ticket %d] Vol:%.2f (%.0f%%) cerrado a +%.1fR. Restante: %.2f lote",
+                                    ticket, partial, pct_mult * 100.0, g_step1_trigger_r, vol - partial);
                      }
                   }
                } else {
@@ -1274,7 +1437,7 @@ void UpdateDashboard() {
    string trend_txt = (price > ma) ? "ALCISTA (Busca BUY)" : "BAJISTA (Busca SELL)";
    color trend_clr = (price > ma) ? clrLime : clrRed;
    int y = 20;
-   DrawLabel("lbl_Title", "AURUM SNIPER V12.9 (ULTIMATE)", 20, y, clrGold, 12); y += 22;
+   DrawLabel("lbl_Title", "AURUM SNIPER V13.40 (PRO)", 20, y, clrGold, 12); y += 22;
    long sym_trade_mode = SymbolInfoInteger(_Symbol, SYMBOL_TRADE_MODE);
    bool sym_enabled  = (sym_trade_mode != SYMBOL_TRADE_MODE_DISABLED);
    bool algo_allowed = sym_enabled && TerminalInfoInteger(TERMINAL_TRADE_ALLOWED) &&
@@ -1283,10 +1446,10 @@ void UpdateDashboard() {
    string ts = !sym_enabled ? ("Estado: SIMBOLO BLOQUEADO (usar "+_Symbol+"micro)")
              : (algo_allowed ? "Estado: PERMITIDO Y OPERATIVO" : "Estado: DESACTIVADO (Revisar MT5/F7)");
    DrawLabel("lbl_TradeStatus", ts, 20, y, algo_allowed ? clrLime : clrRed, 10); y += 20;
-   if(g_gold_mode_active) { DrawLabel("lbl_AssetMode", "MODO ORO: ACTIVO", 20, y, clrOrange, 10); y += 20; }
+   if(g_gold_mode_active) { DrawLabel("lbl_AssetMode", "MODO ORO / MICRO-ORO: ACTIVO", 20, y, clrOrange, 10); y += 20; }
    else ObjectDelete(0, "lbl_AssetMode");
    
-   string trail_mode_txt = InpUseStepTrailing ? "FASES R (BE -> +1R -> +2R -> Runner)" : (InpUseTrailingStop ? "TRAILING CONTINUO" : "SOLO BREAK-EVEN");
+   string trail_mode_txt = InpUseStepTrailing ? StringFormat("FASES R (BE %.1fR -> +%.1fR -> TP3 %.1fR)", InpStep1_TriggerR, InpStep2_LockR, InpStep3_TriggerR) : (InpUseTrailingStop ? "TRAILING CONTINUO" : "SOLO BREAK-EVEN");
    DrawLabel("lbl_TrailMode", "Gestión SL: " + trail_mode_txt, 20, y, InpUseStepTrailing ? clrLime : clrSilver, 10); y += 20;
 
    DrawLabel("lbl_Trend", "Tendencia H1: " + trend_txt, 20, y, trend_clr, 10); y += 20;
@@ -1304,6 +1467,12 @@ void UpdateDashboard() {
    string mtf_txt = !InpUseMTFFilter ? "OFF (Solo H1)" : (htf_bull ? "ALCISTA OK" : (htf_bear ? "BAJISTA OK" : "CONFLICTO"));
    color  mtf_clr = !InpUseMTFFilter ? clrGray : (htf_bull ? clrLime : (htf_bear ? clrRed : clrOrange));
    DrawLabel("lbl_MTF", "Filtro MTF ("+EnumToString(InpHTFTimeframe)+"): "+mtf_txt, 20, y, mtf_clr, 10); y += 20;
+
+   if(InpUseMicroTrigger) {
+      DrawLabel("lbl_MicroTrigger", "Micro-Gatillo ("+EnumToString(InpMicroTriggerTimeframe)+"): ACTIVO (EMA "+IntegerToString(InpMicroTriggerEMA)+")", 20, y, clrDeepSkyBlue, 10); y += 20;
+   } else {
+      ObjectDelete(0, "lbl_MicroTrigger");
+   }
    string dd_txt = StringFormat("Drawdown: %.2f%% / Max %.1f%%",
       (g_start_equity - AccountInfoDouble(ACCOUNT_EQUITY)) / g_start_equity * 100.0, InpMaxDailyLoss);
    DrawLabel("lbl_Risk", dd_txt, 20, y, clrWhite, 10); y += 20;
@@ -1335,11 +1504,14 @@ void UpdateDashboard() {
 
    MqlDateTime dt_dash; TimeLocal(dt_dash);
    bool is_crypto_dash = (StringFind(_Symbol, "BTC") >= 0 || StringFind(_Symbol, "ETH") >= 0);
+   int cur_min_dash = dt_dash.hour * 60 + dt_dash.min;
    if(InpUseHighLiquiditySession && (!is_crypto_dash || !InpSessionFilterForexOnly)) {
       bool is_sun = (dt_dash.day_of_week == 0);
-      bool in_kz = (!is_sun && dt_dash.hour >= InpSessionStartHourCDMX && dt_dash.hour < InpSessionEndHourCDMX);
-      string kz_txt = StringFormat("Killzone CDMX (%02d-%02dh): %s (%02d:%02d)",
-                                   InpSessionStartHourCDMX, InpSessionEndHourCDMX,
+      int start_min_dash = InpSessionStartHourCDMX * 60 + InpSessionStartMinCDMX;
+      int end_min_dash   = InpSessionEndHourCDMX * 60;
+      bool in_kz = (!is_sun && cur_min_dash >= start_min_dash && cur_min_dash < end_min_dash);
+      string kz_txt = StringFormat("Killzone CDMX (%02d:%02d-%02d:00): %s (%02d:%02d)",
+                                   InpSessionStartHourCDMX, InpSessionStartMinCDMX, InpSessionEndHourCDMX,
                                    (is_sun ? "DOMINGO CERRADO" : in_kz ? "ACTIVA (Londres/NY)" : "FUERA DE SESION (Asia)"),
                                    dt_dash.hour, dt_dash.min);
       DrawLabel("lbl_Killzone", kz_txt, 20, y, (in_kz ? clrLime : clrOrange), 10); y += 20;
@@ -1349,9 +1521,11 @@ void UpdateDashboard() {
 
    if(dt_dash.day_of_week == 5 && InpUseFridayFilter) {
       if(!is_crypto_dash || !InpFridayFilterForexOnly) {
-         bool in_fri = (dt_dash.hour >= InpFridayStartHourCDMX && dt_dash.hour < InpFridayEndHourCDMX);
-         string fri_txt = StringFormat("Viernes CDMX (%02d-%02dh): %s (%02d:%02d)",
-                                       InpFridayStartHourCDMX, InpFridayEndHourCDMX,
+         int fri_start_dash = InpFridayStartHourCDMX * 60 + InpSessionStartMinCDMX;
+         int fri_end_dash   = InpFridayEndHourCDMX * 60;
+         bool in_fri = (cur_min_dash >= fri_start_dash && cur_min_dash < fri_end_dash);
+         string fri_txt = StringFormat("Viernes CDMX (%02d:%02d-%02d:00): %s (%02d:%02d)",
+                                       InpFridayStartHourCDMX, InpSessionStartMinCDMX, InpFridayEndHourCDMX,
                                        (in_fri ? "OPERATIVO" : "CERRADO (Fin de Semana)"),
                                        dt_dash.hour, dt_dash.min);
          DrawLabel("lbl_Friday", fri_txt, 20, y, (in_fri ? clrLime : clrOrange), 10); y += 20;
