@@ -1,49 +1,62 @@
 //@version=5
-strategy("Aurum Vision V22 [Ultimate]", overlay=true, initial_capital=1000, default_qty_type=strategy.fixed, default_qty_value=0.1)
+indicator("Aurum Vision [Institutional Scalper V13.50]", overlay=true, max_lines_count=500, max_labels_count=500)
+
+// ==============================================================================
+// 🦅 AURUM VISION V13.50 PRO — TRADINGVIEW SCRIPT
+// Diseñado para sincronización total con AurumSniper MT5 (V13.50)
+// ==============================================================================
 
 // ==================== DEFINICION DE COLORES ====================
-c_gold   = color.new(#FFD700, 0)
-c_white  = color.white
-c_black  = color.black
-c_lime   = color.lime
-c_green  = color.green
-c_red    = color.red
-c_gray   = color.gray
-c_orange = color.orange
-c_cyan   = color.new(#00E5FF, 0)
-c_purple = color.new(#B388FF, 0)
+c_gold    = color.new(#FFD700, 0)
+c_white   = color.white
+c_black   = color.black
+c_lime    = color.lime
+c_green   = color.green
+c_red     = color.red
+c_gray    = color.gray
+c_orange  = color.orange
+c_cyan    = color.new(#00E5FF, 0)
+c_purple  = color.new(#B388FF, 0)
 
 // ==================== INPUTS ====================
-grp_strat = "Estrategia Sniper V22"
+grp_strat = "=== ESTRATEGIA SNIPER INSTITUCIONAL (V13.50) ==="
 inp_ma_per    = input.int(200, "Tendencia H1 (EMA)", group=grp_strat) 
-inp_zone_dist = input.int(100, "Distancia a Zona H1", group=grp_strat) 
-inp_rsi_ob    = input.int(70, "RSI SobreVenta (> Venta)", group=grp_strat)
-inp_rsi_os    = input.int(30, "RSI Sobrecompra (< Compra)", group=grp_strat)
-inp_adx_min   = input.int(20, "ADX Mínimo", group=grp_strat)
+inp_zone_dist = input.int(100, "Distancia a Zona H1 (pts)", group=grp_strat) 
+inp_rsi_ob    = input.int(62, "RSI Sobrecompra (> Venta)", group=grp_strat)
+inp_rsi_os    = input.int(38, "RSI Sobrevendido (< Compra)", group=grp_strat)
+inp_adx_min   = input.int(15, "ADX Mínimo de Filtro", group=grp_strat)
 inp_use_mtf   = input.bool(true, "Habilitar Filtro MTF (H4)", group=grp_strat)
-inp_htf       = input.timeframe("240", "Temporalidad Mayor MTF", group=grp_strat)
+inp_htf       = input.timeframe("240", "Temporalidad Mayor MTF (H4)", group=grp_strat)
 inp_use_slope = input.bool(true, "Exigir Inclinación (Slope) EMA MTF", group=grp_strat)
-inp_auto_tune = input.bool(true, "Auto-Ajustar por Activo", group=grp_strat)
+inp_auto_tune = input.bool(true, "Auto-Ajustar por Activo (Gold / Forex)", group=grp_strat)
 
-grp_sess = "Horarios y Sesiones (Killzones)"
+grp_pa = "=== ACCIÓN DEL PRECIO & ABSORCIÓN (V13.40/V13.50) ==="
+inp_use_pa_filter   = input.bool(true, "Exigir Confirmación de Acción del Precio", group=grp_pa)
+inp_min_wick_ratio  = input.float(0.30, "Ratio Mínimo Mecha de Absorción (30%)", minval=0.1, maxval=0.7, step=0.05, group=grp_pa)
+
+grp_risk = "=== GESTIÓN DE SALIDA POR FASES REALISTAS (V13.50) ==="
+inp_step1_r   = input.float(0.8, "Fase 1: Sweet Spot BE & 60% Parcial (+R)", step=0.1, group=grp_risk)
+inp_step2_r   = input.float(1.8, "Fase 2: Target Final Liquidación (+R)", step=0.1, group=grp_risk)
+inp_step3_r   = input.float(2.2, "Fase 3: Runner Extendido (+R)", step=0.1, group=grp_risk)
+inp_atr_mult  = input.float(2.0, "Multiplicador SL (x ATR)", step=0.1, group=grp_risk)
+inp_gold_min_sl = input.float(10.0, "SL Mínimo en Oro ($ USD)", group=grp_risk)
+inp_gold_max_sl = input.float(18.0, "SL Máximo Techo en Oro ($ USD)", group=grp_risk)
+inp_max_atr_gold= input.float(15.0, "Filtro Anti-Noticias: ATR Máximo en Oro ($ USD)", group=grp_risk)
+
+grp_sess = "=== HORARIOS & KILLZONES INSTITUCIONALES ==="
 inp_show_sess_label = input.bool(true, "Mostrar Etiqueta de Sesión en Gráfico", group=grp_sess)
 inp_show_sessions   = input.bool(true, "Colorear Fondo según Sesión Activa", group=grp_sess)
 inp_show_overlap    = input.bool(true, "Destacar Golden Overlap (Londres + NY)", group=grp_sess)
 
-grp_risk = "Gestión Salida (Fases V12.8 / V22)"
-inp_step1_r   = input.float(0.6, "Fase 1: Trigger BE & Parcial (+R)", step=0.1, group=grp_risk)
-inp_step2_r   = input.float(1.5, "Fase 2: Target TP2 (+R)", step=0.1, group=grp_risk)
-inp_step3_r   = input.float(3.0, "Fase 3: Target TP3 Runner (+R)", step=0.1, group=grp_risk)
-inp_rr        = input.float(3.0, "Ratio Riesgo:Beneficio Final", step=0.1, group=grp_risk)
-inp_atr_mult  = input.float(2.0, "Multiplicador SL (x ATR)", step=0.1, group=grp_risk)
-
 // ==================== AUTO-AJUSTE DINÁMICO POR ACTIVO ====================
-int zone_dist = inp_zone_dist
-int rsi_ob    = inp_rsi_ob
-int rsi_os    = inp_rsi_os
-int adx_min   = inp_adx_min
-float atr_mult = inp_atr_mult
+int zone_dist      = inp_zone_dist
+int rsi_ob         = inp_rsi_ob
+int rsi_os         = inp_rsi_os
+int adx_min        = inp_adx_min
+float atr_mult     = inp_atr_mult
 float min_sl_price = 0.0
+float max_sl_price = 0.0
+bool is_gold_asset = false
 
 if inp_auto_tune
     string sym = syminfo.ticker
@@ -65,27 +78,27 @@ if inp_auto_tune
         rsi_ob    := 60
         adx_min   := 15
         atr_mult  := 2.0
-    else if str.contains(sym, "XAUUSD") or str.contains(sym, "GOLD")
-        zone_dist    := 600
+    else if str.contains(sym, "XAUUSD") or str.contains(sym, "GOLD") or str.contains(sym, "MGC")
+        is_gold_asset := true
+        zone_dist    := 900
         rsi_os       := 38
         rsi_ob       := 62
         adx_min      := 20
         atr_mult     := 2.0
-        min_sl_price := 15.0
+        min_sl_price := inp_gold_min_sl
+        max_sl_price := inp_gold_max_sl
 
-
-// ==================== DETECCIÓN DINÁMICA DE SESIÓN ACTIVA Y PRÓXIMA ====================
-// Minutos transcurridos en el día UTC (0 a 1439)
+// ==================== DETECCIÓN DINÁMICA DE SESIÓN (UTC) ====================
 cur_h = hour(time, "UTC")
 cur_m = minute(time, "UTC")
 mins_now = cur_h * 60 + cur_m
 
 // Rangos en UTC:
-// Tokio (Asia):  00:00 - 09:00 (0 a 540)
-// Londres:       07:00 - 16:00 (420 a 960)
-// Golden Overlap:12:00 - 16:00 (720 a 960)
-// Nueva York:    12:00 - 21:00 (720 a 1260)
-// Fuera sesión:  21:00 - 00:00 (1260 a 1440)
+// Tokio (Asia):   00:00 - 09:00 (0 a 540)
+// Londres:        07:00 - 16:00 (420 a 960)
+// Golden Overlap: 12:00 - 16:00 (720 a 960)
+// Nueva York:     12:00 - 21:00 (720 a 1260)
+// Fuera sesión:   21:00 - 00:00 (1260 a 1440)
 
 string sess_activa     = "💤 FUERA DE SESIÓN"
 color  sess_activa_col = c_gray
@@ -123,7 +136,7 @@ else
     sess_proxima    := "🇯🇵 TOKIO / ASIA (00:00 UTC)"
     target_mins     := 1440
 
-// Cálculo del tiempo restante en horas y minutos
+// Cuenta regresiva a próxima sesión
 int diff_mins = target_mins - mins_now
 if diff_mins < 0
     diff_mins := diff_mins + 1440
@@ -131,7 +144,7 @@ int rem_h = math.floor(diff_mins / 60)
 int rem_m = diff_mins % 60
 string countdown_str = " (en " + (rem_h > 0 ? str.tostring(rem_h) + "h " : "") + str.tostring(rem_m) + "m)"
 
-// Sombreado de fondo opcional
+// Fondo de sesiones
 color session_bg_color = na
 if inp_show_sessions
     if in_overlap and inp_show_overlap
@@ -145,7 +158,6 @@ if inp_show_sessions
 
 bgcolor(session_bg_color, title="Sombreado de Sesión")
 
-
 // ==================== DATOS MULTI-TIMEFRAME (NON-REPAINTING) ====================
 [h1_ema, h1_high_20, h1_low_20] = request.security(syminfo.tickerid, "60", [ta.ema(close[1], inp_ma_per), ta.highest(high[1], 20), ta.lowest(low[1], 20)], lookahead=barmerge.lookahead_off)
 [htf_ema, htf_ema_p2]           = request.security(syminfo.tickerid, inp_htf, [ta.ema(close[1], inp_ma_per), ta.ema(close[3], inp_ma_per)], lookahead=barmerge.lookahead_off)
@@ -153,6 +165,25 @@ bgcolor(session_bg_color, title="Sombreado de Sesión")
 rsi = ta.rsi(close, 14)
 [diplus, diminus, adx] = ta.dmi(14, 14)
 atr = ta.atr(14)
+
+// ==================== FILTRO ANTI-NOTICIAS / VOLATILIDAD EXTREMA ====================
+bool is_extreme_news_volatility = is_gold_asset and (atr > inp_max_atr_gold)
+
+// ==================== CONFIRMACIÓN DE ACCIÓN DEL PRECIO (V13.40/V13.50) ====================
+candle_range = high[1] - low[1]
+lower_wick = math.min(open[1], close[1]) - low[1]
+upper_wick = high[1] - math.max(open[1], close[1])
+
+bool pa_buy_ok = true
+bool pa_sell_ok = true
+
+if inp_use_pa_filter and candle_range > 0
+    bool bull_close   = (close[1] > open[1])
+    bool bear_close   = (close[1] < open[1])
+    bool bull_pinbar  = (lower_wick / candle_range) >= inp_min_wick_ratio
+    bool bear_pinbar  = (upper_wick / candle_range) >= inp_min_wick_ratio
+    pa_buy_ok  := bull_close or bull_pinbar
+    pa_sell_ok := bear_close or bear_pinbar
 
 // ==================== LÓGICA DE FILTROS ====================
 h1_bull  = close > h1_ema
@@ -177,12 +208,9 @@ avg_body_stable := avg_body_stable / 10
 last_body = body[1]
 is_spike = last_body > (avg_body_stable * 3.0)
 
-// ==================== PATRONES Y TRAMPAS ====================
+// ==================== PATRONES Y TRAMPAS DE LIQUIDEZ ====================
 is_hammer = (math.min(open, close) >= low + (high-low)*0.7) and (low < math.min(open, close))
 is_star   = (math.max(open, close) <= low + (high-low)*0.3) and (high > math.max(open, close))
-
-is_bull_engulf = close > open and close[1] < open[1] and close > open[1] and open < close[1]
-is_bear_engulf = close < open and close[1] > open[1] and close < open[1] and open > close[1]
 
 trap_bear = low < h1_low_20 and close > h1_low_20 and in_zone_buy
 trap_bull = high > h1_high_20 and close < h1_high_20 and in_zone_sell
@@ -190,14 +218,11 @@ trap_bull = high > h1_high_20 and close < h1_high_20 and in_zone_sell
 plotshape(trap_bear, "Trampa Soporte", shape.labelup, location.belowbar, c_lime, text="🪤 Trampa", textcolor=c_black, size=size.tiny)
 plotshape(trap_bull, "Trampa Resistencia", shape.labeldown, location.abovebar, c_red, text="🪤 Trampa", textcolor=c_white, size=size.tiny)
 
-// ==================== DISPAROS (TRIGGERS) ====================
-long_cond_raw = trend_bull and in_zone_buy and rsi < rsi_os and adx > adx_min and not is_spike
-short_cond_raw = trend_bear and in_zone_sell and rsi > rsi_ob and adx > adx_min and not is_spike
+// ==================== DISPAROS SNIPER PRO (V13.50) ====================
+long_cond  = trend_bull and in_zone_buy and rsi < rsi_os and adx > adx_min and not is_spike and pa_buy_ok and not is_extreme_news_volatility
+short_cond = trend_bear and in_zone_sell and rsi > rsi_ob and adx > adx_min and not is_spike and pa_sell_ok and not is_extreme_news_volatility
 
-long_cond = long_cond_raw and strategy.position_size == 0
-short_cond = short_cond_raw and strategy.position_size == 0
-
-// ==================== EJECUCIÓN & VISUALES ====================
+// Plot EMA y Zonas
 col_bull = color.new(c_lime, 0)
 col_bear = color.new(c_red, 0)
 
@@ -231,7 +256,10 @@ if long_cond or short_cond
     
     float en_price  = close
     float atr_val   = atr
-    float sl_dist   = math.max(atr_val * atr_mult, min_sl_price)
+    float raw_sl_dist = atr_val * atr_mult
+    float sl_dist   = math.max(raw_sl_dist, min_sl_price)
+    if max_sl_price > 0 and sl_dist > max_sl_price
+        sl_dist := max_sl_price
     
     float sl_price  = long_cond ? en_price - sl_dist : en_price + sl_dist
     float tp1_price = long_cond ? en_price + (sl_dist * inp_step1_r) : en_price - (sl_dist * inp_step1_r)
@@ -246,15 +274,15 @@ if long_cond or short_cond
     ln_tp2 := line.new(bar_index, tp2_price, bar_index + ext_bars, tp2_price, color=c_cyan, style=line.style_dashed, width=2)
     ln_tp3 := line.new(bar_index, tp3_price, bar_index + ext_bars, tp3_price, color=c_lime, width=2)
     
-    lbl_tp1 := label.new(bar_index + ext_bars, tp1_price, "🎯 TP1 (+" + str.tostring(inp_step1_r, "#.#") + "R / BE & Parcial): " + str.tostring(tp1_price, "#.##"), color=color.new(c_black, 100), textcolor=c_gold, style=label.style_label_left, size=size.small)
-    lbl_tp2 := label.new(bar_index + ext_bars, tp2_price, "🎯 TP2 (+" + str.tostring(inp_step2_r, "#.#") + "R / Lock Profit): " + str.tostring(tp2_price, "#.##"), color=color.new(c_black, 100), textcolor=c_cyan, style=label.style_label_left, size=size.small)
+    lbl_tp1 := label.new(bar_index + ext_bars, tp1_price, "🎯 TP1 (+" + str.tostring(inp_step1_r, "#.#") + "R / 60% Parcial & BE): " + str.tostring(tp1_price, "#.##"), color=color.new(c_black, 100), textcolor=c_gold, style=label.style_label_left, size=size.small)
+    lbl_tp2 := label.new(bar_index + ext_bars, tp2_price, "🎯 TP2 (+" + str.tostring(inp_step2_r, "#.#") + "R / TP Final 40%): " + str.tostring(tp2_price, "#.##"), color=color.new(c_black, 100), textcolor=c_cyan, style=label.style_label_left, size=size.small)
     lbl_tp3 := label.new(bar_index + ext_bars, tp3_price, "🚀 TP3 (+" + str.tostring(inp_step3_r, "#.#") + "R / Runner): " + str.tostring(tp3_price, "#.##"), color=color.new(c_black, 100), textcolor=c_lime, style=label.style_label_left, size=size.small)
-    lbl_sl  := label.new(bar_index + ext_bars, sl_price, "🛑 SL (1R): " + str.tostring(sl_price, "#.##"), color=color.new(c_black, 100), textcolor=c_red, style=label.style_label_left, size=size.small)
+    lbl_sl  := label.new(bar_index + ext_bars, sl_price, "🛑 SL (1R Capped): " + str.tostring(sl_price, "#.##"), color=color.new(c_black, 100), textcolor=c_red, style=label.style_label_left, size=size.small)
     
-    string txt_info = (long_cond ? "BUY SNIPER" : "SELL SNIPER") + "\nEntrada: " + str.tostring(en_price, "#.##") + "\nTP1 (" + str.tostring(inp_step1_r, "#.#") + "R): " + str.tostring(tp1_price, "#.##") + "\nTP2 (" + str.tostring(inp_step2_r, "#.#") + "R): " + str.tostring(tp2_price, "#.##") + "\nTP3 (" + str.tostring(inp_step3_r, "#.#") + "R): " + str.tostring(tp3_price, "#.##") + "\nSL: " + str.tostring(sl_price, "#.##")
+    string txt_info = (long_cond ? "BUY SNIPER V13.50" : "SELL SNIPER V13.50") + "\nEntrada: " + str.tostring(en_price, "#.##") + "\nTP1 (" + str.tostring(inp_step1_r, "#.#") + "R): " + str.tostring(tp1_price, "#.##") + "\nTP2 (" + str.tostring(inp_step2_r, "#.#") + "R): " + str.tostring(tp2_price, "#.##") + "\nSL: " + str.tostring(sl_price, "#.##")
     lbl_info := label.new(bar_index + 4, en_price, txt_info, color=color.new(c_black, 20), textcolor=sig_col, style=label.style_label_center, size=size.small)
 
-// ==================== ETIQUETAS EDUCATIVAS ====================
+// Etiquetas en última barra
 if barstate.islast
     label.new(bar_index, h1_ema, "EMA H1\n(" + (trend_bull ? "ALCISTA" : "BAJISTA") + ")", color=trend_bull?col_bull:col_bear, style=label.style_label_left, textcolor=c_white)
     label.new(bar_index, h1_high_20, "H1 RESISTENCIA\n(Zona Sell)", color=c_red, style=label.style_label_left, textcolor=c_white)
@@ -263,31 +291,12 @@ if barstate.islast
 if is_spike
     label.new(bar_index, high, "⚠️ SPIKE!", color=c_orange, style=label.style_label_down, textcolor=c_white, size=size.tiny)
 
-if is_hammer and in_zone_buy
-    label.new(bar_index, low, "🔨", color=color.new(c_lime, 100), style=label.style_label_up, textcolor=c_lime, size=size.tiny)
-if is_star and in_zone_sell
-    label.new(bar_index, high, "💫", color=color.new(c_red, 100), style=label.style_label_down, textcolor=c_red, size=size.tiny)
-if is_bull_engulf and in_zone_buy
-    label.new(bar_index, low, "🔄 Engulf", color=color.new(c_lime, 100), style=label.style_label_up, textcolor=c_lime, size=size.tiny)
-if is_bear_engulf and in_zone_sell
-    label.new(bar_index, high, "🔄 Engulf", color=color.new(c_red, 100), style=label.style_label_down, textcolor=c_red, size=size.tiny)
-
-// Ejecución de Estrategia
-if long_cond
-    sl_dist = math.max(atr * atr_mult, min_sl_price)
-    tp_dist = sl_dist * inp_rr
-    strategy.entry("Sniper Buy", strategy.long)
-    strategy.exit("Exit Buy", "Sniper Buy", stop = close - sl_dist, limit = close + tp_dist)
-
-if short_cond
-    sl_dist = math.max(atr * atr_mult, min_sl_price)
-    tp_dist = sl_dist * inp_rr
-    strategy.entry("Sniper Sell", strategy.short)
-    strategy.exit("Exit Sell", "Sniper Sell", stop = close + sl_dist, limit = close - tp_dist)
+if is_extreme_news_volatility
+    label.new(bar_index, high, "📰 ALTA NOTICIA ATR>$15", color=c_red, style=label.style_label_down, textcolor=c_white, size=size.tiny)
 
 // Señales en Gráfico
-plotshape(long_cond, "BUY", shape.triangleup, location.belowbar, col_bull, size=size.small, text="SNIPER-V22")
-plotshape(short_cond, "SELL", shape.triangledown, location.abovebar, col_bear, size=size.small, text="SNIPER-V22")
+plotshape(long_cond, "BUY", shape.triangleup, location.belowbar, col_bull, size=size.small, text="SNIPER-V13.50")
+plotshape(short_cond, "SELL", shape.triangledown, location.abovebar, col_bear, size=size.small, text="SNIPER-V13.50")
 
 // ==================== ETIQUETA EN GRÁFICO: SESIÓN ACTIVA & PRÓXIMA ====================
 var label lbl_sess_live = na
@@ -300,12 +309,12 @@ if barstate.islast and inp_show_sess_label
                                style = label.style_label_left, 
                                size = size.small)
 
-// ==================== DASHBOARD EN TIEMPO REAL ====================
-var table dash = table.new(position.top_right, 2, 11, bgcolor = color.new(c_black, 30), border_width=1)
+// ==================== DASHBOARD HUD EN TIEMPO REAL ====================
+var table dash = table.new(position.top_right, 2, 12, bgcolor = color.new(c_black, 30), border_width=1)
 
 if barstate.islast
     table.cell(dash, 0, 0, "🦅 AURUM VISION", text_color=c_gold, text_size=size.normal)
-    table.cell(dash, 1, 0, "V22 ULTIMATE", text_color=c_white, text_size=size.normal)
+    table.cell(dash, 1, 0, "V13.50 PRO", text_color=c_white, text_size=size.normal)
 
     // Fila 1: Sesión Activa
     table.cell(dash, 0, 1, "Sesión Activa", text_color=c_white)
@@ -316,7 +325,7 @@ if barstate.islast
     table.cell(dash, 1, 2, sess_proxima + countdown_str, text_color=c_white)
 
     // Fila 3: RSI
-    table.cell(dash, 0, 3, "RSI (M1/M5)", text_color=c_white)
+    table.cell(dash, 0, 3, "RSI (M15)", text_color=c_white)
     rsi_col = rsi < rsi_os ? c_lime : rsi > rsi_ob ? c_red : c_gray
     table.cell(dash, 1, 3, str.tostring(rsi, "#.##"), text_color=rsi_col)
 
@@ -330,9 +339,9 @@ if barstate.islast
     mtf_col = not inp_use_mtf ? c_gray : htf_bull ? c_lime : htf_bear ? c_red : c_orange
     table.cell(dash, 1, 5, mtf_txt, text_color=mtf_col)
 
-    // Fila 6: Filtro Spike
-    table.cell(dash, 0, 6, "Anti-Spike", text_color=c_white)
-    table.cell(dash, 1, 6, is_spike ? "⚠️ RECHAZADO" : "✅ SEGURO", text_color= is_spike ? c_orange : c_green)
+    // Fila 6: Acción del Precio
+    table.cell(dash, 0, 6, "Acción Precio (PA)", text_color=c_white)
+    table.cell(dash, 1, 6, pa_buy_ok or pa_sell_ok ? "✅ GIRO/ABSORCIÓN" : "⏳ ESPERANDO GIRO", text_color= pa_buy_ok or pa_sell_ok ? c_lime : c_orange)
 
     // Fila 7: Status Zona
     table.cell(dash, 0, 7, "Zona H1", text_color=c_white)
@@ -355,8 +364,16 @@ if barstate.islast
 
     // Fila 9: Fases TP
     table.cell(dash, 0, 9, "Fases TP", text_color=c_white)
-    table.cell(dash, 1, 9, str.tostring(inp_step1_r, "#.#") + "R (BE) -> " + str.tostring(inp_step2_r, "#.#") + "R -> " + str.tostring(inp_step3_r, "#.#") + "R", text_color=c_gold)
+    table.cell(dash, 1, 9, "+" + str.tostring(inp_step1_r, "#.#") + "R (60%) ➔ +" + str.tostring(inp_step2_r, "#.#") + "R (40%)", text_color=c_gold)
 
-    // Fila 10: Modo Trailing
-    table.cell(dash, 0, 10, "Gestión R", text_color=c_white)
-    table.cell(dash, 1, 10, "Parcial 50% + Runner", text_color=c_lime)
+    // Fila 10: Filtro Volatilidad ATR
+    table.cell(dash, 0, 10, "Anti-Noticias", text_color=c_white)
+    table.cell(dash, 1, 10, is_extreme_news_volatility ? "⚠️ ATR ELEVADO" : "✅ ATR ESTABLE", text_color= is_extreme_news_volatility ? c_red : c_green)
+
+    // Fila 11: Techo SL
+    table.cell(dash, 0, 11, "Techo SL", text_color=c_white)
+    table.cell(dash, 1, 11, is_gold_asset ? "$10.00 - $18.00" : "Dinámico ATR", text_color=c_cyan)
+
+// ==================== ALERTAS TRADINGVIEW ====================
+alertcondition(long_cond, title="🦅 AURUM COMPRA (BUY)", message="🦅 AURUM SNIPER BUY V13.50 en {{ticker}} @ {{close}} | TP1: +0.8R (60% Parcial & BE) | TP2: +1.8R")
+alertcondition(short_cond, title="🦅 AURUM VENTA (SELL)", message="🦅 AURUM SNIPER SELL V13.50 en {{ticker}} @ {{close}} | TP1: +0.8R (60% Parcial & BE) | TP2: +1.8R")
