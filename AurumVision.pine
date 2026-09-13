@@ -55,6 +55,8 @@ inp_use_pa_filter   = input.bool(true, "Exigir Confirmación de Vela de Giro / A
 inp_min_wick_ratio  = input.float(0.30, "Ratio Mínimo Mecha de Rechazo (30%)", minval=0.1, maxval=0.7, step=0.05, group=grp_pa)
 
 grp_risk = "=== GESTIÓN DE RIESGO & SALIDAS ESCALONADAS ==="
+inp_use_microlock = input.bool(true, "Activar Micro-Lock Temprano (+0.5R / BE & 50% Parcial)", group=grp_risk)
+inp_microlock_r   = input.float(0.5, "Micro-Lock Nivel (+R)", step=0.1, group=grp_risk)
 inp_step1_r     = input.float(1.0, "Fase 1: Break-Even & 50% Parcial (+R)", step=0.1, group=grp_risk)
 inp_step2_r     = input.float(1.8, "Fase 2: Target Principal (+R)", step=0.1, group=grp_risk)
 inp_step3_r     = input.float(2.2, "Fase 3: Runner Extendido (+R)", step=0.1, group=grp_risk)
@@ -388,6 +390,7 @@ plotshape(short_cond, "SELL SNIPER BETA", shape.triangledown, location.abovebar,
 
 // --- VISUALIZADOR DE SETUP ESCALONADO (TP1 / TP2 / TP3 / SL) ---
 var line  ln_sl   = na
+var line  ln_ml   = na
 var line  ln_tp1  = na
 var line  ln_tp2  = na
 var line  ln_tp3  = na
@@ -396,6 +399,7 @@ var label lbl_setup = na
 
 if long_cond or short_cond
     line.delete(ln_sl)
+    line.delete(ln_ml)
     line.delete(ln_tp1)
     line.delete(ln_tp2)
     line.delete(ln_tp3)
@@ -408,6 +412,7 @@ if long_cond or short_cond
         sl_dist := max_sl_price
     
     float sl_price  = long_cond ? en_price - sl_dist : en_price + sl_dist
+    float ml_price  = long_cond ? en_price + (sl_dist * inp_microlock_r) : en_price - (sl_dist * inp_microlock_r)
     float tp1_price = long_cond ? en_price + (sl_dist * inp_step1_r) : en_price - (sl_dist * inp_step1_r)
     float tp2_price = long_cond ? en_price + (sl_dist * inp_step2_r) : en_price - (sl_dist * inp_step2_r)
     float tp3_price = long_cond ? en_price + (sl_dist * inp_step3_r) : en_price - (sl_dist * inp_step3_r)
@@ -416,14 +421,18 @@ if long_cond or short_cond
     int ext = 20
     ln_en  := line.new(bar_index, en_price, bar_index + ext, en_price, color=color.new(c_white, 40), style=line.style_dotted, width=1)
     ln_sl  := line.new(bar_index, sl_price, bar_index + ext, sl_price, color=c_red, width=2)
+    if inp_use_microlock
+        ln_ml  := line.new(bar_index, ml_price, bar_index + ext, ml_price, color=c_orange, style=line.style_dotted, width=2)
     ln_tp1 := line.new(bar_index, tp1_price, bar_index + ext, tp1_price, color=c_gold, style=line.style_dashed, width=2)
     ln_tp2 := line.new(bar_index, tp2_price, bar_index + ext, tp2_price, color=c_cyan, style=line.style_dashed, width=2)
     ln_tp3 := line.new(bar_index, tp3_price, bar_index + ext, tp3_price, color=c_lime, width=2)
     
+    string ml_txt = inp_use_microlock ? ("\nMicro-Lock (+" + str.tostring(inp_microlock_r, "#.#") + "R / 50% BE): " + str.tostring(ml_price, "#.##")) : ""
     string txt = (long_cond ? "BUY SNIPER V14 BETA" : "SELL SNIPER V14 BETA") +
                  "\nEntrada: " + str.tostring(en_price, "#.##") +
-                 "\nTP1 (+" + str.tostring(inp_step1_r, "#.#") + "R / 50% BE): " + str.tostring(tp1_price, "#.##") +
-                 "\nTP2 (+" + str.tostring(inp_step2_r, "#.#") + "R / 40%): " + str.tostring(tp2_price, "#.##") +
+                 ml_txt +
+                 "\nTP1 (+" + str.tostring(inp_step1_r, "#.#") + "R / BE): " + str.tostring(tp1_price, "#.##") +
+                 "\nTP2 (+" + str.tostring(inp_step2_r, "#.#") + "R): " + str.tostring(tp2_price, "#.##") +
                  "\nSL (1R): " + str.tostring(sl_price, "#.##")
     lbl_setup := label.new(bar_index + 5, en_price, txt, color=color.new(c_black, 20), textcolor=sig_col, style=label.style_label_left, size=size.small)
 

@@ -70,13 +70,22 @@ input bool     InpAutoSetManualSLTP  = true;
 input bool     InpAllowRangeTrading       = true;  // [V13.70] Permitir compras/ventas en Soporte/Resistencia durante consolidación
 
 input bool     InpUseStepTrailing    = true; // [V13.70] Habilitar Fases (BE 1.3R -> TP 2.2R -> Runner 3.0R)
+input bool     InpUseMicroLock05R    = true; // [V14.3] Micro-Lock Temprano a +0.5R (Asegura parcial y BE en scalps rápidos de Oro)
+input double   InpMicroLock05Trigger = 0.5;  // [V14.3] Nivel R para Micro-Lock (0.5R = ~$3.5-$4 USD de ganancia)
+input double   InpMicroLock05Pct     = 50.0; // [V14.3] Porcentaje de cierre parcial en Micro-Lock (50% del lote)
+input int      InpMicroLockLockPips  = 10;   // [V14.3] Pips de ganancia asegurada en SL tras Micro-Lock (+1 pip)
 input double   InpStep1_TriggerR     = 1.3;  // [V13.70] Fase 1: Activar Break-Even protegido y 40% Parcial (+1.3R)
+input double   InpStep1_5_TriggerR   = 1.0;  // [V14.1] Fase 1.5: Asegurar Ganancia (+1.0R)
+input double   InpStep1_5_LockR      = 0.4;  // [V14.1] Fase 1.5: Ganancia asegurada (+0.4R)
 input double   InpStep2_TriggerR     = 2.2;  // [V13.70] Fase 2: TP Principal y Asegurar Ganancia (+2.2R)
 input double   InpStep2_LockR        = 1.2;  // [V13.70] Fase 2: Ganancia bloqueada (+1.2R)
 input double   InpStep3_TriggerR     = 3.0;  // [V13.70] Fase 3: Nivel Runner Extendido (+3.0R)
 input double   InpStep3_LockR        = 2.0;  // [V13.70] Fase 3: Ganancia bloqueada (+2.0R)
 input bool     InpCloseOnTP3         = true; // [V12.97] Cerrar 100% de la posición en TP2/TP3
 input bool     InpStepRunnerAbove3R  = false;// [V12.9] Runner infinito sobre 3.0R (solo si InpCloseOnTP3 = false)
+input bool     InpUseCandleTrailing  = true; // [V14.1] Candle-Trailing Stop tras N velas en profit
+input int      InpCandleTrailAfterBars = 4;  // [V14.1] Activar Candle-Trail tras N velas en ganancia (optimizado: 4 velas)
+input int      InpCandleTrailBars    = 2;    // [V14.1] Ceñir SL a High/Low de las últimas N velas cerradas
 
 input bool     InpUseTrailingStop    = false; // Trailing Stop continuo clásico (false si se usan Fases)
 input bool     InpUseATRTrailing     = true;
@@ -87,11 +96,12 @@ input bool     InpUseLiquidityTraps  = true;
 
 input group "=== FILTROS DE SEGURIDAD Y SESION (V13.00) ==="
 input int      InpCooldownBars             = 2;
-input bool     InpUseHighLiquiditySession  = true; // [V13.00] Operar solo en Sesiones de Alta Liquidez (Londres + NY)
+input bool     InpUseHighLiquiditySession  = false;// [V14.2] Operar solo en Sesiones de Alta Liquidez (false = 24h continuas salvo rollover)
 input int      InpSessionStartHourCDMX     = 1;    // Hora Inicio CDMX (01:00 AM)
 input int      InpSessionStartMinCDMX      = 15;   // Minuto Inicio CDMX (01:15 AM - Evita Rollover de Broker)
 input int      InpSessionEndHourCDMX       = 12;   // Hora Cierre CDMX (12:00 PM - Fin Golden Overlap)
 input bool     InpSessionFilterForexOnly   = true; // Aplicar a Forex, Metales e Índices (Cripto 24/7 libre)
+input bool     InpSessionFilterMetals      = false;// [V14.2] Aplicar Killzone a Metales/Oro (false = Oro opera 24h salvo rollover)
 input bool     InpCryptoAvoidWeekendChop   = true; // [V13.80] Bloquear Domingo en Cripto (Evita trampas de baja liquidez y bull traps de fin de semana)
 input bool     InpUseFridayFilter          = true; // [V12.96] Filtro Especial de Viernes (Horario CDMX)
 input int      InpFridayStartHourCDMX      = 1;    // Hora Inicio Viernes CDMX (01:00 AM)
@@ -137,12 +147,16 @@ double g_momentum_spike_multiplier;
 double g_risk_reward;
 double g_min_sl_price = 0; // SL minimo en precio (0 = solo ATR). Para ORO = $10.00
 double g_max_sl_price = 0; // [V13.50] SL maximo en precio. Para ORO = $18.00
-double g_step1_trigger_r = 0.8;
-double g_step2_trigger_r = 1.8;
-double g_step2_lock_r    = 1.0;
-double g_step3_trigger_r = 2.2;
-double g_step3_lock_r    = 1.5;
-double g_partial_percent = 60.0;
+double g_microlock_trigger_r = 0.5;
+double g_microlock_pct       = 50.0;
+double g_step1_trigger_r   = 0.8;
+double g_step1_5_trigger_r = 1.0;
+double g_step1_5_lock_r    = 0.4;
+double g_step2_trigger_r   = 1.8;
+double g_step2_lock_r      = 1.0;
+double g_step3_trigger_r   = 2.2;
+double g_step3_lock_r      = 1.5;
+double g_partial_percent   = 60.0;
 
 // [OPT #3] Cache de Indicadores
 double g_ma_h1_cache      = 0;
@@ -193,12 +207,16 @@ void AutoTuneAssets() {
    g_rsi_overbought = InpRSIOverbought; g_rsi_oversold = InpRSIOversold;
    g_gold_mode_active = false; g_momentum_spike_multiplier = 3.0; g_risk_reward = InpRiskReward;
    g_min_sl_price = 0; // Default: sin minimo para Forex
-   g_step1_trigger_r = InpStep1_TriggerR;
-   g_step2_trigger_r = InpStep2_TriggerR;
-   g_step2_lock_r    = InpStep2_LockR;
-   g_step3_trigger_r = InpStep3_TriggerR;
-   g_step3_lock_r    = InpStep3_LockR;
-   g_partial_percent = InpPartialPercent;
+   g_microlock_trigger_r = InpMicroLock05Trigger;
+   g_microlock_pct       = InpMicroLock05Pct;
+   g_step1_trigger_r   = InpStep1_TriggerR;
+   g_step1_5_trigger_r = InpStep1_5_TriggerR;
+   g_step1_5_lock_r    = InpStep1_5_LockR;
+   g_step2_trigger_r   = InpStep2_TriggerR;
+   g_step2_lock_r      = InpStep2_LockR;
+   g_step3_trigger_r   = InpStep3_TriggerR;
+   g_step3_lock_r      = InpStep3_LockR;
+   g_partial_percent   = InpPartialPercent;
 
    if(InpAutoGoldSettings) {
       string symbol = _Symbol; StringToUpper(symbol);
@@ -209,18 +227,22 @@ void AutoTuneAssets() {
          g_distancia_puntos = (_Period >= PERIOD_M15) ? 900 : 700; // [V13.50] Adaptativo M15/M5
          g_be_trigger = (_Period >= PERIOD_M15) ? 900 : 700;
          g_adx_threshold = 20; g_atr_multiplier = 2.0; g_risk_reward = InpRiskReward; // [V13.70] Ratio positivo (1:2.2)
-         g_step1_trigger_r = InpStep1_TriggerR; // [V13.70] +1.3R para dar holgura al impulso
-         g_step2_trigger_r = InpStep2_TriggerR; // [V13.70] +2.2R
-         g_step2_lock_r    = InpStep2_LockR;    // [V13.70] +1.2R
-         g_step3_trigger_r = InpStep3_TriggerR; // [V13.70] +3.0R
-         g_step3_lock_r    = InpStep3_LockR;    // [V13.70] +2.0R
-         g_partial_percent = InpPartialPercent; // [V13.70] 40.0%
+         g_microlock_trigger_r = InpMicroLock05Trigger; // [V14.3] Micro-Lock 0.5R
+         g_microlock_pct       = InpMicroLock05Pct;
+         g_step1_trigger_r   = InpStep1_TriggerR; // [V13.70] +1.3R para dar holgura al impulso
+         g_step1_5_trigger_r = InpStep1_5_TriggerR;
+         g_step1_5_lock_r    = InpStep1_5_LockR;
+         g_step2_trigger_r   = InpStep2_TriggerR; // [V13.70] +2.2R
+         g_step2_lock_r      = InpStep2_LockR;    // [V13.70] +1.2R
+         g_step3_trigger_r   = InpStep3_TriggerR; // [V13.70] +3.0R
+         g_step3_lock_r      = InpStep3_LockR;    // [V13.70] +2.0R
+         g_partial_percent   = InpPartialPercent; // [V13.70] 40.0%
          g_rsi_oversold = 42; g_rsi_overbought = 58;
          g_momentum_spike_multiplier = 4.5;
          g_min_sl_price = MathMax(InpGoldMinSL, (_Period >= PERIOD_M15 ? 10.0 : 8.0)); // [V13.50]
          g_max_sl_price = (InpGoldMaxSL > 0) ? InpGoldMaxSL : (_Period >= PERIOD_M15 ? 18.0 : 15.0); // [V13.50]
-         PrintFormat("AURUM GOLD & MICRO-GOLD MODE V13.70 ACTIVE (%s): ATR x2.0, R:R 1:%.1f, Fases (BE %.1fR -> TP %.1fR), SL [$%.2f - $%.2f], Parcial %.0f%%",
-                     EnumToString(_Period), g_risk_reward, g_step1_trigger_r, g_step2_trigger_r, g_min_sl_price, g_max_sl_price, g_partial_percent);
+         PrintFormat("AURUM GOLD & MICRO-GOLD MODE V14.3 ACTIVE (%s): ATR x2.0, R:R 1:%.1f, Micro-Lock (%.1fR -> %.0f%% BE), Fases (BE %.1fR -> TP %.1fR), SL [$%.2f - $%.2f], Parcial %.0f%%",
+                     EnumToString(_Period), g_risk_reward, g_microlock_trigger_r, g_microlock_pct, g_step1_trigger_r, g_step2_trigger_r, g_min_sl_price, g_max_sl_price, g_partial_percent);
       }
    }
    if(InpAutoForexSettings) {
@@ -905,6 +927,7 @@ bool IsTradingSession(string &session_reason) {
    if(StringFind(sym, "BTC") >= 0 || StringFind(sym, "ETH") >= 0 || StringFind(sym, "BITCOIN") >= 0 || StringFind(sym, "ETHEREUM") >= 0) {
       is_crypto = true;
    }
+   bool is_metal = (StringFind(sym, "GOLD") >= 0 || StringFind(sym, "XAU") >= 0 || StringFind(sym, "SILVER") >= 0 || StringFind(sym, "XAG") >= 0);
 
    int current_min_of_day = dt_local.hour * 60 + dt_local.min;
 
@@ -914,14 +937,29 @@ bool IsTradingSession(string &session_reason) {
       return false;
    }
 
-   // [V13.00] Filtro de Sesiones de Alta Liquidez CDMX (Londres + NY: 01:15 a 12:00 CDMX)
-   // Bloquea sesión asiática nocturna (20:00 - 01:14) y aperturas dominicales en Forex/Oro/Índices
-   if(InpUseHighLiquiditySession && (!is_crypto || !InpSessionFilterForexOnly)) {
-      // Bloqueo total en domingos (day 0) para Forex/Metales/Índices (aperturas con spreads erráticos)
+   // [V14.2] Protección Permanente contra Rollover y Fines de Semana (Forex y Metales 24h)
+   if(!is_crypto) {
+      // Bloqueo total de Domingo para Forex y Metales (Mercado cerrado / apertura con spreads erráticos)
       if(dt_local.day_of_week == 0) {
-         session_reason = "[Fin de Semana / Domingo Forex Cerrado]";
+         session_reason = "[Fin de Semana / Domingo Forex y Metales Cerrado]";
          return false;
       }
+      MqlDateTime dt_srv;
+      TimeCurrent(dt_srv);
+      int srv_min = dt_srv.hour * 60 + dt_srv.min;
+      // Ventana de Rollover del Servidor del Broker (23:55 a 00:05)
+      if(srv_min >= 1435 || srv_min <= 5) {
+         session_reason = StringFormat("[Rollover Broker Activo (%02d:%02d Servidor - Evitando Spreads Anómalos)]", dt_srv.hour, dt_srv.min);
+         return false;
+      }
+   }
+
+   // [V13.00] Filtro de Sesiones de Alta Liquidez CDMX (Londres + NY: 01:15 a 12:00 CDMX)
+   bool apply_killzone = InpUseHighLiquiditySession;
+   if(is_crypto && InpSessionFilterForexOnly) apply_killzone = false;
+   if(is_metal && !InpSessionFilterMetals)    apply_killzone = false;
+
+   if(apply_killzone) {
       int start_min = InpSessionStartHourCDMX * 60 + InpSessionStartMinCDMX;
       int end_min   = InpSessionEndHourCDMX * 60;
       if(current_min_of_day < start_min || current_min_of_day >= end_min) {
@@ -1520,13 +1558,19 @@ void GestionarPosicionesPro() {
             target_sl = (type == POSITION_TYPE_BUY) ? (entry + locked_dist) : (entry - locked_dist);
             phase_name = StringFormat("FASE 2 (%.1fR -> SL a +%.1fR Asegurado)", g_step2_trigger_r, g_step2_lock_r);
          }
+         // FASE 1.5: +1.0R Alcanzado (Bloquea +0.4R en verde, evita escape del trade)
+         else if(profit_R >= g_step1_5_trigger_r) {
+            double locked_dist = g_step1_5_lock_r * r_dist;
+            target_sl = (type == POSITION_TYPE_BUY) ? (entry + locked_dist) : (entry - locked_dist);
+            phase_name = StringFormat("FASE 1.5 (%.1fR -> SL a +%.1fR Asegurado)", g_step1_5_trigger_r, g_step1_5_lock_r);
+         }
          // FASE 1: Trigger BE Alcanzado (SL a Break-Even + lock pips)
          else if(profit_R >= g_step1_trigger_r) {
             target_sl = (type == POSITION_TYPE_BUY) ? (entry + lock_dist) : (entry - lock_dist);
             phase_name = StringFormat("FASE 1 (%.1fR/BE -> SL a Entrada Protegida)", g_step1_trigger_r);
 
-            // Cierre parcial en Fase 1 si está habilitado
-            if(InpUsePartials && pos_magic == MAGIC_NUMBER && !IsPartialAlreadyClosed(ticket)) {
+            // Cierre parcial en Fase 1 si está habilitado (ahora también en trades manuales gestionados)
+            if(InpUsePartials && (pos_magic == MAGIC_NUMBER || InpManageManualTrades) && !IsPartialAlreadyClosed(ticket)) {
                double min_vol  = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN);
                double step_vol = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_STEP);
                double pct_mult = (g_partial_percent > 0 && g_partial_percent <= 90.0) ? (g_partial_percent / 100.0) : 0.50;
@@ -1542,6 +1586,62 @@ void GestionarPosicionesPro() {
                   }
                } else {
                   MarkPartialClosed(ticket);
+               }
+            }
+         }
+         // [V14.3] FASE 0.5R: Micro-Lock Temprano (+0.5R ~ $3.5-$4 USD) - Cierre 50% y SL a BE protegido
+         else if(InpUseMicroLock05R && profit_R >= g_microlock_trigger_r) {
+            double lock_05_dist = InpMicroLockLockPips * _Point;
+            target_sl = (type == POSITION_TYPE_BUY) ? (entry + lock_05_dist) : (entry - lock_05_dist);
+            phase_name = StringFormat("FASE 0.5R (Micro-Lock %.1fR/BE -> SL Protegido y Parcial %.0f%%)", g_microlock_trigger_r, g_microlock_pct);
+
+            // Cierre parcial temprano si aún no se ha tomado parcial
+            if(InpUsePartials && (pos_magic == MAGIC_NUMBER || InpManageManualTrades) && !IsPartialAlreadyClosed(ticket)) {
+               double min_vol  = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN);
+               double step_vol = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_STEP);
+               double pct_mult = (g_microlock_pct > 0 && g_microlock_pct <= 90.0) ? (g_microlock_pct / 100.0) : 0.50;
+               double calc_vol = NormalizeDouble(vol * pct_mult, 2);
+               double partial  = (step_vol > 0) ? MathFloor(calc_vol / step_vol) * step_vol : calc_vol;
+               if(partial >= min_vol && (vol - partial) >= min_vol) {
+                  if(ticket > 0 && PositionSelectByTicket(ticket)) {
+                     if(trade.PositionClosePartial(ticket, partial)) {
+                        MarkPartialClosed(ticket);
+                        PrintFormat("[PARCIAL MICRO-LOCK Ticket %d] Vol:%.2f (%.0f%%) cerrado a +%.2fR. Restante: %.2f lote",
+                                    ticket, partial, pct_mult * 100.0, profit_R, vol - partial);
+                     }
+                  }
+               } else {
+                  MarkPartialClosed(ticket);
+               }
+            }
+         }
+
+         // [V14.1] Candle-Trailing Stop: Si el trade lleva >= InpCandleTrailAfterBars en curso y ya alcanzó al menos Fase 0.5R / Fase 1
+         if(InpUseCandleTrailing && (profit_R >= g_step1_trigger_r || (InpUseMicroLock05R && profit_R >= g_microlock_trigger_r)) && target_sl > 0) {
+            datetime open_time = (datetime)PositionGetInteger(POSITION_TIME);
+            int bars_held = iBarShift(_Symbol, _Period, open_time);
+            if(bars_held >= InpCandleTrailAfterBars) {
+               int bars_to_check = MathMax(InpCandleTrailBars, 1);
+               if(type == POSITION_TYPE_BUY) {
+                  int lowest_bar = iLowest(_Symbol, _Period, MODE_LOW, bars_to_check, 1);
+                  if(lowest_bar > 0) {
+                     double candle_sl = NormalizeDouble(iLow(_Symbol, _Period, lowest_bar) - (5 * _Point), _Digits);
+                     double min_allowed_sl = entry + lock_dist;
+                     if(candle_sl > target_sl && candle_sl >= min_allowed_sl) {
+                        target_sl = candle_sl;
+                        phase_name = StringFormat("CANDLE-TRAIL (%d barras) SL->%.2f", bars_held, target_sl);
+                     }
+                  }
+               } else if(type == POSITION_TYPE_SELL) {
+                  int highest_bar = iHighest(_Symbol, _Period, MODE_HIGH, bars_to_check, 1);
+                  if(highest_bar > 0) {
+                     double candle_sl = NormalizeDouble(iHigh(_Symbol, _Period, highest_bar) + (5 * _Point), _Digits);
+                     double max_allowed_sl = entry - lock_dist;
+                     if(candle_sl < target_sl && candle_sl <= max_allowed_sl) {
+                        target_sl = candle_sl;
+                        phase_name = StringFormat("CANDLE-TRAIL (%d barras) SL->%.2f", bars_held, target_sl);
+                     }
+                  }
                }
             }
          }
@@ -1588,7 +1688,7 @@ void GestionarPosicionesPro() {
             target_sl = NormalizeDouble(target_sl, _Digits);
             bool is_risky = (type == POSITION_TYPE_BUY) ? (sl < target_sl) : (sl == 0 || sl > target_sl);
             if(is_risky) {
-               if(InpUsePartials && pos_magic == MAGIC_NUMBER && !IsPartialAlreadyClosed(ticket)) {
+               if(InpUsePartials && (pos_magic == MAGIC_NUMBER || InpManageManualTrades) && !IsPartialAlreadyClosed(ticket)) {
                   double min_vol  = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN);
                   double step_vol = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_STEP);
                   double half_vol = NormalizeDouble(vol / 2.0, 2);
@@ -1773,14 +1873,24 @@ void DrawPositionLevels() {
    double profit_price = (type == POSITION_TYPE_BUY) ? (cur_price - entry) : (entry - cur_price);
    double profit_R = (r_dist > 0) ? (profit_price / r_dist) : 0;
    
-   double tp1 = (type == POSITION_TYPE_BUY) ? (entry + InpStep1_TriggerR * r_dist) : (entry - InpStep1_TriggerR * r_dist);
-   double tp2 = (type == POSITION_TYPE_BUY) ? (entry + InpStep2_TriggerR * r_dist) : (entry - InpStep2_TriggerR * r_dist);
-   double tp3 = (type == POSITION_TYPE_BUY) ? (entry + InpStep3_TriggerR * r_dist) : (entry - InpStep3_TriggerR * r_dist);
+   double tp05 = (type == POSITION_TYPE_BUY) ? (entry + InpMicroLock05Trigger * r_dist) : (entry - InpMicroLock05Trigger * r_dist);
+   double tp1  = (type == POSITION_TYPE_BUY) ? (entry + InpStep1_TriggerR * r_dist) : (entry - InpStep1_TriggerR * r_dist);
+   double tp2  = (type == POSITION_TYPE_BUY) ? (entry + InpStep2_TriggerR * r_dist) : (entry - InpStep2_TriggerR * r_dist);
+   double tp3  = (type == POSITION_TYPE_BUY) ? (entry + InpStep3_TriggerR * r_dist) : (entry - InpStep3_TriggerR * r_dist);
    
-   tp1 = NormalizeDouble(tp1, _Digits);
-   tp2 = NormalizeDouble(tp2, _Digits);
-   tp3 = NormalizeDouble(tp3, _Digits);
+   tp05 = NormalizeDouble(tp05, _Digits);
+   tp1  = NormalizeDouble(tp1, _Digits);
+   tp2  = NormalizeDouble(tp2, _Digits);
+   tp3  = NormalizeDouble(tp3, _Digits);
    
+   if(InpUseMicroLock05R) {
+      string tp05_tt = StringFormat("Micro-Lock (%.1fR / Parcial %.0f%% & BE): %.2f | %s", InpMicroLock05Trigger, InpMicroLock05Pct, tp05, (profit_R >= InpMicroLock05Trigger ? "ALCANZADO" : StringFormat("Faltan %.1f pts", MathAbs(tp05 - cur_price)/_Point)));
+      DrawChartLine("tp_lvl_05", tp05, clrOrange, STYLE_DOT, 1, tp05_tt);
+   } else {
+      ObjectDelete(0, "tp_lvl_05");
+      ObjectDelete(0, "tp_lvl_txt05");
+   }
+
    string tp1_tt = StringFormat("TP1 (%.1fR / BE & Parcial): %.2f | %s", InpStep1_TriggerR, tp1, (profit_R >= InpStep1_TriggerR ? "ALCANZADO" : StringFormat("Faltan %.1f pts", MathAbs(tp1 - cur_price)/_Point)));
    string tp2_tt = StringFormat("TP2 (%.1fR / Lock +%.1fR): %.2f | %s", InpStep2_TriggerR, InpStep2_LockR, tp2, (profit_R >= InpStep2_TriggerR ? "ALCANZADO" : StringFormat("Faltan %.1f pts", MathAbs(tp2 - cur_price)/_Point)));
    string tp3_tt = StringFormat("TP3 (%.1fR / Runner): %.2f | %s", InpStep3_TriggerR, tp3, (profit_R >= InpStep3_TriggerR ? "ALCANZADO" : StringFormat("Faltan %.1f pts", MathAbs(tp3 - cur_price)/_Point)));
@@ -1792,6 +1902,9 @@ void DrawPositionLevels() {
    datetime bar0_time = iTime(_Symbol, _Period, 0);
    if(bar0_time == 0) bar0_time = TimeCurrent();
    
+   if(InpUseMicroLock05R) {
+      DrawChartText("tp_lvl_txt05", bar0_time, tp05, StringFormat("  🔒 Micro-Lock (%.1fR/BE): ", InpMicroLock05Trigger) + DoubleToString(tp05, _Digits) + (profit_R >= InpMicroLock05Trigger ? " [ALCANZADO ✅]" : ""), clrOrange);
+   }
    DrawChartText("tp_lvl_txt1", bar0_time, tp1, StringFormat("  🎯 TP1 (%.1fR/BE): ", InpStep1_TriggerR) + DoubleToString(tp1, _Digits) + (profit_R >= InpStep1_TriggerR ? " [ALCANZADO ✅]" : ""), clrGold);
    DrawChartText("tp_lvl_txt2", bar0_time, tp2, StringFormat("  🎯 TP2 (%.1fR/+%.1fR): ", InpStep2_TriggerR, InpStep2_LockR) + DoubleToString(tp2, _Digits) + (profit_R >= InpStep2_TriggerR ? " [ALCANZADO ✅]" : ""), clrDeepSkyBlue);
    DrawChartText("tp_lvl_txt3", bar0_time, tp3, StringFormat("  🚀 TP3 (%.1fR/Runner): ", InpStep3_TriggerR) + DoubleToString(tp3, _Digits) + (profit_R >= InpStep3_TriggerR ? " [ALCANZADO ✅]" : ""), clrLime);
@@ -1872,8 +1985,14 @@ void UpdateDashboard() {
 
    MqlDateTime dt_dash; TimeLocal(dt_dash);
    bool is_crypto_dash = (StringFind(_Symbol, "BTC") >= 0 || StringFind(_Symbol, "ETH") >= 0);
+   bool is_metal_dash  = (StringFind(_Symbol, "GOLD") >= 0 || StringFind(_Symbol, "XAU") >= 0 || StringFind(_Symbol, "SILVER") >= 0 || StringFind(_Symbol, "XAG") >= 0);
    int cur_min_dash = dt_dash.hour * 60 + dt_dash.min;
-   if(InpUseHighLiquiditySession && (!is_crypto_dash || !InpSessionFilterForexOnly)) {
+
+   bool apply_kz_dash = InpUseHighLiquiditySession;
+   if(is_crypto_dash && InpSessionFilterForexOnly) apply_kz_dash = false;
+   if(is_metal_dash && !InpSessionFilterMetals)    apply_kz_dash = false;
+
+   if(apply_kz_dash) {
       bool is_sun = (dt_dash.day_of_week == 0);
       int start_min_dash = InpSessionStartHourCDMX * 60 + InpSessionStartMinCDMX;
       int end_min_dash   = InpSessionEndHourCDMX * 60;
@@ -1884,7 +2003,11 @@ void UpdateDashboard() {
                                    dt_dash.hour, dt_dash.min);
       DrawLabel("lbl_Killzone", kz_txt, 20, y, (in_kz ? clrLime : clrOrange), 10); y += 20;
    } else {
-      ObjectDelete(0, "lbl_Killzone");
+      MqlDateTime dt_srv_dash; TimeCurrent(dt_srv_dash);
+      int srv_min_dash = dt_srv_dash.hour * 60 + dt_srv_dash.min;
+      bool in_rollover = (!is_crypto_dash && (srv_min_dash >= 1435 || srv_min_dash <= 5));
+      string kz_txt = in_rollover ? "Horario: PAUSA POR ROLLOVER DEL BROKER" : "Horario: 24 Horas Activo (Protección Rollover ON)";
+      DrawLabel("lbl_Killzone", kz_txt, 20, y, (in_rollover ? clrOrange : clrLime), 10); y += 20;
    }
 
    if(dt_dash.day_of_week == 5 && InpUseFridayFilter) {
