@@ -1,4 +1,5 @@
 # 🦅 AURUM VISION [BETA] — Manual Táctico e Institucional de Estrategia
+> **Aviso de versión:** este manual describe la versión previa y queda archivado para referencia. Para instalación y operación use el perfil V15 documentado en `auditoria/IMPLEMENTACION_V15.md`; el EA no debe conectarse a una cuenta real hasta completar compilación nativa, Strategy Tester y forward en demo.
 **Versión del Sistema:** V12.0 BETA (SMC & Institutional Order Flow Edition)  
 **Plataformas:** TradingView (Visualizador de Estructura) & MetaTrader 5 (Ejecución AurumSniper)  
 **Fecha de Publicación:** Septiembre 2026  

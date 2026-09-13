@@ -1,0 +1,26 @@
+<!doctype html><html lang="es"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Aurum — Auditoría de posiciones</title>
+<style>body{font:16px system-ui;background:#101820;color:#e5e7eb;margin:2rem}h1{color:#e9c46a}select,input{padding:.6rem;margin:.5rem;background:#243342;color:white}table{border-collapse:collapse;width:100%;font-size:14px}td,th{text-align:right;padding:.5rem;border-bottom:1px solid #354452}th{color:#e9c46a}#state{padding:1rem;background:#503e22}#metrics{font-size:1.2rem;margin:1rem}svg{background:#17232e;width:100%;height:180px}label{display:inline-block}.scroll{overflow:auto}</style>
+<h1>Aurum · Histórico auditable</h1><p id="state"></p><p>Snapshot local. Las métricas cambian con los filtros. P&L acumulado por cierre; no representa equity ni drawdown de cuenta.</p>
+<label>Cuenta/moneda <select id="account"></select></label><label>Símbolo <select id="symbol"><option value="">Todos</option></select></label><label>Buscar <input id="query" placeholder="Fecha, dirección o símbolo"></label>
+<div id="metrics"></div><svg id="chart" viewBox="0 0 1000 180" role="img" aria-label="P&L acumulado por fecha de cierre"><polyline fill="none" stroke="#e9c46a" stroke-width="2" id="line"/></svg><p id="range"></p>
+<div class="scroll"><table><thead><tr><th>Cuenta</th><th>Símbolo</th><th>Dirección</th><th>Entrada</th><th>Cierre</th><th>Precio entrada</th><th>P&L</th></tr></thead><tbody id="rows"></tbody></table></div>
+<script>
+const data=__AURUM_DATA__;
+document.getElementById('state').textContent=data.state;
+const el=id=>document.getElementById(id),key=t=>t.account+' | '+t.currency;
+for(const a of [...new Set(data.rows.map(key))].sort()){const o=document.createElement('option');o.value=a;o.textContent=a;el('account').append(o);}
+for(const s of [...new Set(data.rows.map(t=>t.symbol))].sort()){const o=document.createElement('option');o.value=s;o.textContent=s;el('symbol').append(o);}
+function render(){
+ const q=el('query').value.toLowerCase();
+ const rows=data.rows.filter(t=>key(t)===el('account').value&&(!el('symbol').value||t.symbol===el('symbol').value)&&JSON.stringify(t).toLowerCase().includes(q)).sort((a,b)=>a.exit.localeCompare(b.exit));
+ let pnl=0,gain=0,loss=0,wins=0;const curve=[0];
+ rows.forEach(t=>{pnl+=t.pnl;if(t.pnl>0){gain+=t.pnl;wins++;}else loss-=t.pnl;curve.push(pnl);});
+ el('metrics').textContent=`${rows.length} registros | P&L: ${pnl.toFixed(2)} | PF: ${loss>0?(gain/loss).toFixed(3):'N/D'} | Positivos: ${rows.length?(wins/rows.length*100).toFixed(1):'N/D'}%`;
+ const lo=Math.min(...curve),hi=Math.max(...curve),span=hi-lo||1;
+ el('line').setAttribute('points',curve.map((v,i)=>`${i/Math.max(1,curve.length-1)*1000},${170-(v-lo)/span*160}`).join(' '));
+ el('range').textContent=rows.length?`${rows[0].exit} → ${rows[rows.length-1].exit} | Rango acumulado ${lo.toFixed(2)} a ${hi.toFixed(2)}`:'Sin registros';
+ el('rows').replaceChildren();
+ for(const t of rows.slice().reverse()){const tr=document.createElement('tr');for(const v of [t.account,t.symbol,t.direction,t.entry,t.exit,Number(t.price).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:8}),t.pnl.toFixed(2)]){const td=document.createElement('td');td.textContent=v;tr.append(td);}el('rows').append(tr);}
+}
+['account','symbol','query'].forEach(id=>el(id).addEventListener('input',render));render();
+</script></html>

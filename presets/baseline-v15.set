@@ -1,0 +1,15 @@
+; Research preset. Supply verified broker UTC offset and news coverage before testing.
+InpAllowLiveTrading=false
+InpRiskPercent=0.25
+InpMaxPortfolioRiskPercent=0.5
+InpMaxDailyLoss=1.0
+InpMaxTotalDrawdown=6.0
+InpMaxDailyTrades=3
+InpMaxConsecutiveLosses=2
+InpExperimentId=baseline-v15
+InpRiskReward=2.2
+InpUsePartials=false
+InpRunner=false
+InpUseCandleTrailing=false
+InpServerUTCOffsetMinutes=9999
+InpUseNewsFilter=true

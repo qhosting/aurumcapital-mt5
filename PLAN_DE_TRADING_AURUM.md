@@ -1,4 +1,5 @@
 # 🦅 PLAN DE TRADING OFICIAL — AURUM CAPITAL
+> **Estado de esta copia:** documento histórico. La configuración ejecutable vigente es **Aurum V15 en validación**, con 0.25% de riesgo por operación, 0.5% de riesgo inicial agregado, 1% de límite diario, cobertura de noticias obligatoria y entradas reales desactivadas por defecto. Las cifras de 868/893 operaciones no son una validación de rentabilidad: proceden de un export FIFO incompleto y deben conservarse como referencia, no como promesa.
 **Versión:** 1.0 Institucional (SMC & Order Flow Edition)  
 **Vigencia:** 2026 - 2027  
 **Activos Validados:** USDJPYmicro, EURUSD, GOLDmicro  

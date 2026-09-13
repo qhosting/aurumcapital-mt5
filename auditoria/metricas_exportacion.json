@@ -1,0 +1,1212 @@
+{
+  "status": "FIFO_ESTIMATE_NOT_RECONCILED",
+  "source_sha256": "a661858d1b04a8506eda30fb0328b11e26eacf84d4f7e56b74df622456f5d9f2",
+  "csv_sha256": "0a8542bce4250ed6ffd49fea4e87feb8f01dbbffe88f1e7a257a42389b577401",
+  "csv_json_equal": true,
+  "earliest_entry": "2026-01-23 09:50:39",
+  "latest_exit": "2026-09-11 16:01:37",
+  "entry_days": 59,
+  "candidate_entry_groups_not_positions": 683,
+  "exact_duplicate_row_numbers_1_based": [
+    [
+      50,
+      51
+    ]
+  ],
+  "invalid_time_or_volume_rows": [],
+  "overall": {
+    "fragments": 893,
+    "estimated_pnl_usd": -331.45,
+    "gross_positive_usd": 1020.01,
+    "gross_negative_usd": 1351.46,
+    "pf_by_sign": 0.7547467183638435,
+    "mean_estimated_pnl_usd": -0.37116461366181414,
+    "original_labels": {
+      "LOSS": 418,
+      "WIN": 369,
+      "BE": 106
+    },
+    "win_rate_original_pct": 41.32138857782755,
+    "positive_fragments_pct": 45.12877939529675
+  },
+  "by_account": {
+    "345807240": {
+      "fragments": 250,
+      "estimated_pnl_usd": -156.57,
+      "gross_positive_usd": 419.97,
+      "gross_negative_usd": 576.54,
+      "pf_by_sign": 0.7284316786346133,
+      "mean_estimated_pnl_usd": -0.62628,
+      "original_labels": {
+        "WIN": 96,
+        "BE": 3,
+        "LOSS": 151
+      },
+      "win_rate_original_pct": 38.4,
+      "positive_fragments_pct": 38.8
+    },
+    "390993180": {
+      "fragments": 643,
+      "estimated_pnl_usd": -174.88,
+      "gross_positive_usd": 600.04,
+      "gross_negative_usd": 774.92,
+      "pf_by_sign": 0.7743250916223611,
+      "mean_estimated_pnl_usd": -0.27197511664074653,
+      "original_labels": {
+        "LOSS": 267,
+        "WIN": 273,
+        "BE": 103
+      },
+      "win_rate_original_pct": 42.45723172628305,
+      "positive_fragments_pct": 47.58942457231726
+    }
+  },
+  "by_symbol": {
+    "BRENTCash": {
+      "fragments": 1,
+      "estimated_pnl_usd": -0.01,
+      "gross_positive_usd": 0.0,
+      "gross_negative_usd": 0.01,
+      "pf_by_sign": 0.0,
+      "mean_estimated_pnl_usd": -0.01,
+      "original_labels": {
+        "BE": 1
+      },
+      "win_rate_original_pct": 0.0,
+      "positive_fragments_pct": 0.0
+    },
+    "BTCUSD": {
+      "fragments": 11,
+      "estimated_pnl_usd": -1.9,
+      "gross_positive_usd": 13.07,
+      "gross_negative_usd": 14.97,
+      "pf_by_sign": 0.8730794923179692,
+      "mean_estimated_pnl_usd": -0.17272727272727273,
+      "original_labels": {
+        "LOSS": 5,
+        "BE": 2,
+        "WIN": 4
+      },
+      "win_rate_original_pct": 36.36363636363637,
+      "positive_fragments_pct": 36.36363636363637
+    },
+    "EURUSD": {
+      "fragments": 17,
+      "estimated_pnl_usd": 44.23,
+      "gross_positive_usd": 55.9,
+      "gross_negative_usd": 11.67,
+      "pf_by_sign": 4.790059982862039,
+      "mean_estimated_pnl_usd": 2.6017647058823528,
+      "original_labels": {
+        "LOSS": 4,
+        "WIN": 12,
+        "BE": 1
+      },
+      "win_rate_original_pct": 70.58823529411765,
+      "positive_fragments_pct": 70.58823529411765
+    },
+    "EURUSDmicro": {
+      "fragments": 83,
+      "estimated_pnl_usd": -20.89,
+      "gross_positive_usd": 9.82,
+      "gross_negative_usd": 30.71,
+      "pf_by_sign": 0.3197655486812113,
+      "mean_estimated_pnl_usd": -0.2516867469879518,
+      "original_labels": {
+        "LOSS": 31,
+        "WIN": 28,
+        "BE": 24
+      },
+      "win_rate_original_pct": 33.734939759036145,
+      "positive_fragments_pct": 40.963855421686745
+    },
+    "GBPUSD": {
+      "fragments": 57,
+      "estimated_pnl_usd": -5.47,
+      "gross_positive_usd": 53.29,
+      "gross_negative_usd": 58.76,
+      "pf_by_sign": 0.9069094622191968,
+      "mean_estimated_pnl_usd": -0.09596491228070175,
+      "original_labels": {
+        "WIN": 21,
+        "LOSS": 36
+      },
+      "win_rate_original_pct": 36.8421052631579,
+      "positive_fragments_pct": 36.8421052631579
+    },
+    "GBPUSDmicro": {
+      "fragments": 37,
+      "estimated_pnl_usd": -14.11,
+      "gross_positive_usd": 0.36,
+      "gross_negative_usd": 14.47,
+      "pf_by_sign": 0.0248790601243953,
+      "mean_estimated_pnl_usd": -0.38135135135135134,
+      "original_labels": {
+        "BE": 24,
+        "LOSS": 11,
+        "WIN": 2
+      },
+      "win_rate_original_pct": 5.405405405405405,
+      "positive_fragments_pct": 10.81081081081081
+    },
+    "GOLD": {
+      "fragments": 60,
+      "estimated_pnl_usd": -146.84,
+      "gross_positive_usd": 264.6,
+      "gross_negative_usd": 411.44,
+      "pf_by_sign": 0.6431071359128913,
+      "mean_estimated_pnl_usd": -2.4473333333333334,
+      "original_labels": {
+        "BE": 1,
+        "WIN": 34,
+        "LOSS": 25
+      },
+      "win_rate_original_pct": 56.666666666666664,
+      "positive_fragments_pct": 56.666666666666664
+    },
+    "GOLDmicro": {
+      "fragments": 460,
+      "estimated_pnl_usd": -138.82,
+      "gross_positive_usd": 565.66,
+      "gross_negative_usd": 704.48,
+      "pf_by_sign": 0.8029468544174426,
+      "mean_estimated_pnl_usd": -0.30178260869565215,
+      "original_labels": {
+        "WIN": 209,
+        "BE": 40,
+        "LOSS": 211
+      },
+      "win_rate_original_pct": 45.43478260869565,
+      "positive_fragments_pct": 50.43478260869565
+    },
+    "US30Cash": {
+      "fragments": 2,
+      "estimated_pnl_usd": 1.52,
+      "gross_positive_usd": 2.02,
+      "gross_negative_usd": 0.5,
+      "pf_by_sign": 4.04,
+      "mean_estimated_pnl_usd": 0.76,
+      "original_labels": {
+        "WIN": 1,
+        "LOSS": 1
+      },
+      "win_rate_original_pct": 50.0,
+      "positive_fragments_pct": 50.0
+    },
+    "USDJPY": {
+      "fragments": 116,
+      "estimated_pnl_usd": -48.49,
+      "gross_positive_usd": 46.18,
+      "gross_negative_usd": 94.67,
+      "pf_by_sign": 0.487799725361783,
+      "mean_estimated_pnl_usd": -0.41801724137931034,
+      "original_labels": {
+        "WIN": 29,
+        "LOSS": 86,
+        "BE": 1
+      },
+      "win_rate_original_pct": 25.0,
+      "positive_fragments_pct": 25.862068965517242
+    },
+    "USDJPYmicro": {
+      "fragments": 49,
+      "estimated_pnl_usd": -0.67,
+      "gross_positive_usd": 9.11,
+      "gross_negative_usd": 9.78,
+      "pf_by_sign": 0.9314928425357873,
+      "mean_estimated_pnl_usd": -0.013673469387755101,
+      "original_labels": {
+        "BE": 12,
+        "WIN": 29,
+        "LOSS": 8
+      },
+      "win_rate_original_pct": 59.183673469387756,
+      "positive_fragments_pct": 63.265306122448976
+    }
+  },
+  "by_direction": {
+    "BUY": {
+      "fragments": 592,
+      "estimated_pnl_usd": -25.47,
+      "gross_positive_usd": 861.87,
+      "gross_negative_usd": 887.34,
+      "pf_by_sign": 0.9712962336872,
+      "mean_estimated_pnl_usd": -0.043023648648648646,
+      "original_labels": {
+        "WIN": 266,
+        "BE": 46,
+        "LOSS": 280
+      },
+      "win_rate_original_pct": 44.932432432432435,
+      "positive_fragments_pct": 48.141891891891895
+    },
+    "SELL": {
+      "fragments": 301,
+      "estimated_pnl_usd": -305.98,
+      "gross_positive_usd": 158.14,
+      "gross_negative_usd": 464.12,
+      "pf_by_sign": 0.34073084547099886,
+      "mean_estimated_pnl_usd": -1.016544850498339,
+      "original_labels": {
+        "LOSS": 138,
+        "BE": 60,
+        "WIN": 103
+      },
+      "win_rate_original_pct": 34.21926910299003,
+      "positive_fragments_pct": 39.20265780730897
+    }
+  },
+  "by_entry_month": {
+    "2026-01": {
+      "fragments": 9,
+      "estimated_pnl_usd": 12.05,
+      "gross_positive_usd": 12.16,
+      "gross_negative_usd": 0.11,
+      "pf_by_sign": 110.54545454545455,
+      "mean_estimated_pnl_usd": 1.3388888888888888,
+      "original_labels": {
+        "LOSS": 1,
+        "WIN": 6,
+        "BE": 2
+      },
+      "win_rate_original_pct": 66.66666666666667,
+      "positive_fragments_pct": 88.88888888888889
+    },
+    "2026-02": {
+      "fragments": 35,
+      "estimated_pnl_usd": -93.08,
+      "gross_positive_usd": 22.72,
+      "gross_negative_usd": 115.8,
+      "pf_by_sign": 0.19620034542314335,
+      "mean_estimated_pnl_usd": -2.6594285714285713,
+      "original_labels": {
+        "WIN": 20,
+        "BE": 5,
+        "LOSS": 10
+      },
+      "win_rate_original_pct": 57.142857142857146,
+      "positive_fragments_pct": 65.71428571428571
+    },
+    "2026-07": {
+      "fragments": 219,
+      "estimated_pnl_usd": -169.13,
+      "gross_positive_usd": 306.2,
+      "gross_negative_usd": 475.33,
+      "pf_by_sign": 0.6441840405612943,
+      "mean_estimated_pnl_usd": -0.772283105022831,
+      "original_labels": {
+        "WIN": 85,
+        "BE": 23,
+        "LOSS": 111
+      },
+      "win_rate_original_pct": 38.81278538812786,
+      "positive_fragments_pct": 40.63926940639269
+    },
+    "2026-08": {
+      "fragments": 492,
+      "estimated_pnl_usd": -24.67,
+      "gross_positive_usd": 398.92,
+      "gross_negative_usd": 423.59,
+      "pf_by_sign": 0.9417597204844307,
+      "mean_estimated_pnl_usd": -0.050142276422764226,
+      "original_labels": {
+        "WIN": 187,
+        "LOSS": 237,
+        "BE": 68
+      },
+      "win_rate_original_pct": 38.00813008130081,
+      "positive_fragments_pct": 42.479674796747965
+    },
+    "2026-09": {
+      "fragments": 138,
+      "estimated_pnl_usd": -56.62,
+      "gross_positive_usd": 280.01,
+      "gross_negative_usd": 336.63,
+      "pf_by_sign": 0.831803463743576,
+      "mean_estimated_pnl_usd": -0.4102898550724638,
+      "original_labels": {
+        "LOSS": 59,
+        "WIN": 71,
+        "BE": 8
+      },
+      "win_rate_original_pct": 51.44927536231884,
+      "positive_fragments_pct": 53.6231884057971
+    }
+  },
+  "by_exit_month": {
+    "2026-01": {
+      "fragments": 8,
+      "estimated_pnl_usd": 1.29,
+      "gross_positive_usd": 1.4,
+      "gross_negative_usd": 0.11,
+      "pf_by_sign": 12.727272727272727,
+      "mean_estimated_pnl_usd": 0.16125,
+      "original_labels": {
+        "LOSS": 1,
+        "WIN": 5,
+        "BE": 2
+      },
+      "win_rate_original_pct": 62.5,
+      "positive_fragments_pct": 87.5
+    },
+    "2026-02": {
+      "fragments": 34,
+      "estimated_pnl_usd": 0.79,
+      "gross_positive_usd": 29.7,
+      "gross_negative_usd": 28.91,
+      "pf_by_sign": 1.0273261847111725,
+      "mean_estimated_pnl_usd": 0.02323529411764706,
+      "original_labels": {
+        "WIN": 20,
+        "BE": 5,
+        "LOSS": 9
+      },
+      "win_rate_original_pct": 58.8235294117647,
+      "positive_fragments_pct": 67.6470588235294
+    },
+    "2026-07": {
+      "fragments": 214,
+      "estimated_pnl_usd": -84.01,
+      "gross_positive_usd": 265.19,
+      "gross_negative_usd": 349.2,
+      "pf_by_sign": 0.7594215349369988,
+      "mean_estimated_pnl_usd": -0.3925700934579439,
+      "original_labels": {
+        "WIN": 83,
+        "BE": 23,
+        "LOSS": 108
+      },
+      "win_rate_original_pct": 38.78504672897196,
+      "positive_fragments_pct": 40.654205607476634
+    },
+    "2026-08": {
+      "fragments": 497,
+      "estimated_pnl_usd": -168.83,
+      "gross_positive_usd": 443.55,
+      "gross_negative_usd": 612.38,
+      "pf_by_sign": 0.7243051699924883,
+      "mean_estimated_pnl_usd": -0.33969818913480887,
+      "original_labels": {
+        "LOSS": 240,
+        "WIN": 189,
+        "BE": 68
+      },
+      "win_rate_original_pct": 38.028169014084504,
+      "positive_fragments_pct": 42.454728370221325
+    },
+    "2026-09": {
+      "fragments": 140,
+      "estimated_pnl_usd": -80.69,
+      "gross_positive_usd": 280.17,
+      "gross_negative_usd": 360.86,
+      "pf_by_sign": 0.7763952779471263,
+      "mean_estimated_pnl_usd": -0.5763571428571429,
+      "original_labels": {
+        "LOSS": 60,
+        "WIN": 72,
+        "BE": 8
+      },
+      "win_rate_original_pct": 51.42857142857143,
+      "positive_fragments_pct": 53.57142857142857
+    }
+  },
+  "by_entry_hour_unverified_timezone": {
+    "00": {
+      "fragments": 46,
+      "estimated_pnl_usd": -12.7,
+      "gross_positive_usd": 13.57,
+      "gross_negative_usd": 26.27,
+      "pf_by_sign": 0.5165588123334602,
+      "mean_estimated_pnl_usd": -0.27608695652173915,
+      "original_labels": {
+        "WIN": 20,
+        "BE": 6,
+        "LOSS": 20
+      },
+      "win_rate_original_pct": 43.47826086956522,
+      "positive_fragments_pct": 50.0
+    },
+    "01": {
+      "fragments": 42,
+      "estimated_pnl_usd": 29.16,
+      "gross_positive_usd": 46.74,
+      "gross_negative_usd": 17.58,
+      "pf_by_sign": 2.6587030716723548,
+      "mean_estimated_pnl_usd": 0.6942857142857143,
+      "original_labels": {
+        "LOSS": 20,
+        "WIN": 20,
+        "BE": 2
+      },
+      "win_rate_original_pct": 47.61904761904762,
+      "positive_fragments_pct": 50.0
+    },
+    "02": {
+      "fragments": 18,
+      "estimated_pnl_usd": -8.62,
+      "gross_positive_usd": 7.24,
+      "gross_negative_usd": 15.86,
+      "pf_by_sign": 0.45649432534678436,
+      "mean_estimated_pnl_usd": -0.47888888888888886,
+      "original_labels": {
+        "WIN": 8,
+        "LOSS": 10
+      },
+      "win_rate_original_pct": 44.44444444444444,
+      "positive_fragments_pct": 44.44444444444444
+    },
+    "03": {
+      "fragments": 15,
+      "estimated_pnl_usd": -12.44,
+      "gross_positive_usd": 3.56,
+      "gross_negative_usd": 16.0,
+      "pf_by_sign": 0.2225,
+      "mean_estimated_pnl_usd": -0.8293333333333334,
+      "original_labels": {
+        "LOSS": 12,
+        "WIN": 2,
+        "BE": 1
+      },
+      "win_rate_original_pct": 13.333333333333334,
+      "positive_fragments_pct": 13.333333333333334
+    },
+    "04": {
+      "fragments": 13,
+      "estimated_pnl_usd": -6.37,
+      "gross_positive_usd": 4.62,
+      "gross_negative_usd": 10.99,
+      "pf_by_sign": 0.42038216560509556,
+      "mean_estimated_pnl_usd": -0.49,
+      "original_labels": {
+        "LOSS": 5,
+        "BE": 4,
+        "WIN": 4
+      },
+      "win_rate_original_pct": 30.76923076923077,
+      "positive_fragments_pct": 30.76923076923077
+    },
+    "05": {
+      "fragments": 42,
+      "estimated_pnl_usd": -33.89,
+      "gross_positive_usd": 52.32,
+      "gross_negative_usd": 86.21,
+      "pf_by_sign": 0.6068901519545297,
+      "mean_estimated_pnl_usd": -0.8069047619047619,
+      "original_labels": {
+        "LOSS": 24,
+        "WIN": 13,
+        "BE": 5
+      },
+      "win_rate_original_pct": 30.952380952380953,
+      "positive_fragments_pct": 33.333333333333336
+    },
+    "06": {
+      "fragments": 50,
+      "estimated_pnl_usd": 34.15,
+      "gross_positive_usd": 76.59,
+      "gross_negative_usd": 42.44,
+      "pf_by_sign": 1.804665409990575,
+      "mean_estimated_pnl_usd": 0.683,
+      "original_labels": {
+        "BE": 5,
+        "LOSS": 21,
+        "WIN": 24
+      },
+      "win_rate_original_pct": 48.0,
+      "positive_fragments_pct": 52.0
+    },
+    "07": {
+      "fragments": 60,
+      "estimated_pnl_usd": 59.25,
+      "gross_positive_usd": 115.18,
+      "gross_negative_usd": 55.93,
+      "pf_by_sign": 2.059359914178437,
+      "mean_estimated_pnl_usd": 0.9875,
+      "original_labels": {
+        "WIN": 33,
+        "LOSS": 25,
+        "BE": 2
+      },
+      "win_rate_original_pct": 55.0,
+      "positive_fragments_pct": 55.0
+    },
+    "08": {
+      "fragments": 47,
+      "estimated_pnl_usd": -38.46,
+      "gross_positive_usd": 34.28,
+      "gross_negative_usd": 72.74,
+      "pf_by_sign": 0.47126752818256806,
+      "mean_estimated_pnl_usd": -0.8182978723404255,
+      "original_labels": {
+        "WIN": 20,
+        "LOSS": 20,
+        "BE": 7
+      },
+      "win_rate_original_pct": 42.5531914893617,
+      "positive_fragments_pct": 51.06382978723404
+    },
+    "09": {
+      "fragments": 46,
+      "estimated_pnl_usd": 3.98,
+      "gross_positive_usd": 62.61,
+      "gross_negative_usd": 58.63,
+      "pf_by_sign": 1.0678833361760192,
+      "mean_estimated_pnl_usd": 0.08652173913043479,
+      "original_labels": {
+        "LOSS": 23,
+        "WIN": 20,
+        "BE": 3
+      },
+      "win_rate_original_pct": 43.47826086956522,
+      "positive_fragments_pct": 47.82608695652174
+    },
+    "10": {
+      "fragments": 24,
+      "estimated_pnl_usd": 24.98,
+      "gross_positive_usd": 42.18,
+      "gross_negative_usd": 17.2,
+      "pf_by_sign": 2.452325581395349,
+      "mean_estimated_pnl_usd": 1.0408333333333333,
+      "original_labels": {
+        "WIN": 14,
+        "LOSS": 9,
+        "BE": 1
+      },
+      "win_rate_original_pct": 58.333333333333336,
+      "positive_fragments_pct": 62.5
+    },
+    "11": {
+      "fragments": 48,
+      "estimated_pnl_usd": 75.55,
+      "gross_positive_usd": 144.91,
+      "gross_negative_usd": 69.36,
+      "pf_by_sign": 2.089244521337947,
+      "mean_estimated_pnl_usd": 1.5739583333333333,
+      "original_labels": {
+        "BE": 6,
+        "LOSS": 24,
+        "WIN": 18
+      },
+      "win_rate_original_pct": 37.5,
+      "positive_fragments_pct": 39.583333333333336
+    },
+    "12": {
+      "fragments": 41,
+      "estimated_pnl_usd": -131.78,
+      "gross_positive_usd": 24.31,
+      "gross_negative_usd": 156.09,
+      "pf_by_sign": 0.15574348132487667,
+      "mean_estimated_pnl_usd": -3.214146341463415,
+      "original_labels": {
+        "WIN": 17,
+        "LOSS": 18,
+        "BE": 6
+      },
+      "win_rate_original_pct": 41.46341463414634,
+      "positive_fragments_pct": 48.78048780487805
+    },
+    "13": {
+      "fragments": 19,
+      "estimated_pnl_usd": -225.3,
+      "gross_positive_usd": 16.6,
+      "gross_negative_usd": 241.9,
+      "pf_by_sign": 0.06862339809838776,
+      "mean_estimated_pnl_usd": -11.857894736842105,
+      "original_labels": {
+        "WIN": 4,
+        "LOSS": 11,
+        "BE": 4
+      },
+      "win_rate_original_pct": 21.05263157894737,
+      "positive_fragments_pct": 26.31578947368421
+    },
+    "14": {
+      "fragments": 22,
+      "estimated_pnl_usd": 0.72,
+      "gross_positive_usd": 24.31,
+      "gross_negative_usd": 23.59,
+      "pf_by_sign": 1.0305214073760067,
+      "mean_estimated_pnl_usd": 0.03272727272727273,
+      "original_labels": {
+        "LOSS": 11,
+        "WIN": 7,
+        "BE": 4
+      },
+      "win_rate_original_pct": 31.818181818181817,
+      "positive_fragments_pct": 36.36363636363637
+    },
+    "16": {
+      "fragments": 22,
+      "estimated_pnl_usd": 4.42,
+      "gross_positive_usd": 23.16,
+      "gross_negative_usd": 18.74,
+      "pf_by_sign": 1.2358591248665955,
+      "mean_estimated_pnl_usd": 0.2009090909090909,
+      "original_labels": {
+        "BE": 3,
+        "LOSS": 10,
+        "WIN": 9
+      },
+      "win_rate_original_pct": 40.90909090909091,
+      "positive_fragments_pct": 45.45454545454545
+    },
+    "17": {
+      "fragments": 23,
+      "estimated_pnl_usd": 10.06,
+      "gross_positive_usd": 13.89,
+      "gross_negative_usd": 3.83,
+      "pf_by_sign": 3.626631853785901,
+      "mean_estimated_pnl_usd": 0.4373913043478261,
+      "original_labels": {
+        "WIN": 14,
+        "BE": 4,
+        "LOSS": 5
+      },
+      "win_rate_original_pct": 60.869565217391305,
+      "positive_fragments_pct": 60.869565217391305
+    },
+    "18": {
+      "fragments": 83,
+      "estimated_pnl_usd": -10.15,
+      "gross_positive_usd": 63.71,
+      "gross_negative_usd": 73.86,
+      "pf_by_sign": 0.8625778499864609,
+      "mean_estimated_pnl_usd": -0.12228915662650602,
+      "original_labels": {
+        "LOSS": 39,
+        "BE": 4,
+        "WIN": 40
+      },
+      "win_rate_original_pct": 48.19277108433735,
+      "positive_fragments_pct": 48.19277108433735
+    },
+    "19": {
+      "fragments": 67,
+      "estimated_pnl_usd": -41.19,
+      "gross_positive_usd": 67.93,
+      "gross_negative_usd": 109.12,
+      "pf_by_sign": 0.622525659824047,
+      "mean_estimated_pnl_usd": -0.614776119402985,
+      "original_labels": {
+        "LOSS": 36,
+        "BE": 11,
+        "WIN": 20
+      },
+      "win_rate_original_pct": 29.850746268656717,
+      "positive_fragments_pct": 34.32835820895522
+    },
+    "20": {
+      "fragments": 48,
+      "estimated_pnl_usd": -27.47,
+      "gross_positive_usd": 44.18,
+      "gross_negative_usd": 71.65,
+      "pf_by_sign": 0.6166085136078158,
+      "mean_estimated_pnl_usd": -0.5722916666666666,
+      "original_labels": {
+        "WIN": 17,
+        "LOSS": 24,
+        "BE": 7
+      },
+      "win_rate_original_pct": 35.416666666666664,
+      "positive_fragments_pct": 37.5
+    },
+    "21": {
+      "fragments": 36,
+      "estimated_pnl_usd": -43.4,
+      "gross_positive_usd": 13.54,
+      "gross_negative_usd": 56.94,
+      "pf_by_sign": 0.23779416930101863,
+      "mean_estimated_pnl_usd": -1.2055555555555555,
+      "original_labels": {
+        "BE": 7,
+        "WIN": 12,
+        "LOSS": 17
+      },
+      "win_rate_original_pct": 33.333333333333336,
+      "positive_fragments_pct": 41.666666666666664
+    },
+    "22": {
+      "fragments": 44,
+      "estimated_pnl_usd": -14.4,
+      "gross_positive_usd": 35.1,
+      "gross_negative_usd": 49.5,
+      "pf_by_sign": 0.7090909090909091,
+      "mean_estimated_pnl_usd": -0.32727272727272727,
+      "original_labels": {
+        "BE": 9,
+        "WIN": 18,
+        "LOSS": 17
+      },
+      "win_rate_original_pct": 40.90909090909091,
+      "positive_fragments_pct": 50.0
+    },
+    "23": {
+      "fragments": 37,
+      "estimated_pnl_usd": 32.45,
+      "gross_positive_usd": 89.48,
+      "gross_negative_usd": 57.03,
+      "pf_by_sign": 1.5689987725758372,
+      "mean_estimated_pnl_usd": 0.8770270270270271,
+      "original_labels": {
+        "LOSS": 17,
+        "BE": 5,
+        "WIN": 15
+      },
+      "win_rate_original_pct": 40.54054054054054,
+      "positive_fragments_pct": 45.945945945945944
+    }
+  },
+  "by_entry_weekday_unverified_timezone": {
+    "Friday": {
+      "fragments": 120,
+      "estimated_pnl_usd": -231.2,
+      "gross_positive_usd": 114.74,
+      "gross_negative_usd": 345.94,
+      "pf_by_sign": 0.33167601318147655,
+      "mean_estimated_pnl_usd": -1.9266666666666667,
+      "original_labels": {
+        "LOSS": 51,
+        "WIN": 57,
+        "BE": 12
+      },
+      "win_rate_original_pct": 47.5,
+      "positive_fragments_pct": 50.833333333333336
+    },
+    "Monday": {
+      "fragments": 192,
+      "estimated_pnl_usd": -49.05,
+      "gross_positive_usd": 155.32,
+      "gross_negative_usd": 204.37,
+      "pf_by_sign": 0.7599941282967168,
+      "mean_estimated_pnl_usd": -0.25546875,
+      "original_labels": {
+        "BE": 29,
+        "WIN": 73,
+        "LOSS": 90
+      },
+      "win_rate_original_pct": 38.020833333333336,
+      "positive_fragments_pct": 46.354166666666664
+    },
+    "Sunday": {
+      "fragments": 42,
+      "estimated_pnl_usd": -23.19,
+      "gross_positive_usd": 19.0,
+      "gross_negative_usd": 42.19,
+      "pf_by_sign": 0.4503436833372837,
+      "mean_estimated_pnl_usd": -0.5521428571428572,
+      "original_labels": {
+        "LOSS": 24,
+        "WIN": 15,
+        "BE": 3
+      },
+      "win_rate_original_pct": 35.714285714285715,
+      "positive_fragments_pct": 38.095238095238095
+    },
+    "Thursday": {
+      "fragments": 174,
+      "estimated_pnl_usd": 2.21,
+      "gross_positive_usd": 272.45,
+      "gross_negative_usd": 270.24,
+      "pf_by_sign": 1.0081779159265838,
+      "mean_estimated_pnl_usd": 0.012701149425287356,
+      "original_labels": {
+        "LOSS": 87,
+        "WIN": 74,
+        "BE": 13
+      },
+      "win_rate_original_pct": 42.52873563218391,
+      "positive_fragments_pct": 44.827586206896555
+    },
+    "Tuesday": {
+      "fragments": 212,
+      "estimated_pnl_usd": 115.18,
+      "gross_positive_usd": 321.76,
+      "gross_negative_usd": 206.58,
+      "pf_by_sign": 1.5575563946170974,
+      "mean_estimated_pnl_usd": 0.5433018867924528,
+      "original_labels": {
+        "WIN": 91,
+        "BE": 31,
+        "LOSS": 90
+      },
+      "win_rate_original_pct": 42.924528301886795,
+      "positive_fragments_pct": 45.283018867924525
+    },
+    "Wednesday": {
+      "fragments": 153,
+      "estimated_pnl_usd": -145.4,
+      "gross_positive_usd": 136.74,
+      "gross_negative_usd": 282.14,
+      "pf_by_sign": 0.4846530091443964,
+      "mean_estimated_pnl_usd": -0.9503267973856209,
+      "original_labels": {
+        "WIN": 59,
+        "BE": 18,
+        "LOSS": 76
+      },
+      "win_rate_original_pct": 38.56209150326797,
+      "positive_fragments_pct": 41.1764705882353
+    }
+  },
+  "by_duration_minutes": {
+    "30-120": {
+      "fragments": 208,
+      "estimated_pnl_usd": -116.62,
+      "gross_positive_usd": 122.79,
+      "gross_negative_usd": 239.41,
+      "pf_by_sign": 0.5128858443674033,
+      "mean_estimated_pnl_usd": -0.5606730769230769,
+      "original_labels": {
+        "LOSS": 114,
+        "WIN": 68,
+        "BE": 26
+      },
+      "win_rate_original_pct": 32.69230769230769,
+      "positive_fragments_pct": 36.05769230769231
+    },
+    "5-30": {
+      "fragments": 273,
+      "estimated_pnl_usd": 38.8,
+      "gross_positive_usd": 283.39,
+      "gross_negative_usd": 244.59,
+      "pf_by_sign": 1.1586328140970603,
+      "mean_estimated_pnl_usd": 0.14212454212454212,
+      "original_labels": {
+        "WIN": 124,
+        "BE": 34,
+        "LOSS": 115
+      },
+      "win_rate_original_pct": 45.42124542124542,
+      "positive_fragments_pct": 50.54945054945055
+    },
+    "<5": {
+      "fragments": 115,
+      "estimated_pnl_usd": -2.81,
+      "gross_positive_usd": 40.48,
+      "gross_negative_usd": 43.29,
+      "pf_by_sign": 0.9350889350889351,
+      "mean_estimated_pnl_usd": -0.02443478260869565,
+      "original_labels": {
+        "WIN": 38,
+        "LOSS": 44,
+        "BE": 33
+      },
+      "win_rate_original_pct": 33.04347826086956,
+      "positive_fragments_pct": 36.52173913043478
+    },
+    ">120": {
+      "fragments": 297,
+      "estimated_pnl_usd": -250.82,
+      "gross_positive_usd": 573.35,
+      "gross_negative_usd": 824.17,
+      "pf_by_sign": 0.695669582731718,
+      "mean_estimated_pnl_usd": -0.8445117845117845,
+      "original_labels": {
+        "BE": 13,
+        "WIN": 139,
+        "LOSS": 145
+      },
+      "win_rate_original_pct": 46.8013468013468,
+      "positive_fragments_pct": 49.831649831649834
+    }
+  },
+  "worst_fragments": [
+    {
+      "acc": "345807240",
+      "symbol": "GOLD",
+      "direction": "SELL",
+      "volume": 0.1,
+      "entry_time": "2026-07-31 13:46:20",
+      "exit_time": "2026-08-02 16:02:01",
+      "entry_price": 4055.02,
+      "exit_price": 4073.43,
+      "duration_min": 3015.7,
+      "pts": -18.41,
+      "pnl_usd": -184.1,
+      "outcome": "LOSS"
+    },
+    {
+      "acc": "390993180",
+      "symbol": "GOLDmicro",
+      "direction": "BUY",
+      "volume": 0.1,
+      "entry_time": "2026-02-12 12:09:02",
+      "exit_time": "2026-07-14 18:50:45",
+      "entry_price": 4924.2,
+      "exit_price": 4055.25,
+      "duration_min": 219281.7,
+      "pts": -868.95,
+      "pnl_usd": -86.89,
+      "outcome": "LOSS"
+    },
+    {
+      "acc": "390993180",
+      "symbol": "GOLDmicro",
+      "direction": "BUY",
+      "volume": 0.54,
+      "entry_time": "2026-09-09 19:59:59",
+      "exit_time": "2026-09-10 20:25:23",
+      "entry_price": 4412.64,
+      "exit_price": 4326.34,
+      "duration_min": 1465.4,
+      "pts": -86.3,
+      "pnl_usd": -46.6,
+      "outcome": "LOSS"
+    },
+    {
+      "acc": "390993180",
+      "symbol": "GOLDmicro",
+      "direction": "BUY",
+      "volume": 0.54,
+      "entry_time": "2026-09-10 05:56:11",
+      "exit_time": "2026-09-10 20:26:46",
+      "entry_price": 4377.61,
+      "exit_price": 4324.24,
+      "duration_min": 870.6,
+      "pts": -53.37,
+      "pnl_usd": -28.82,
+      "outcome": "LOSS"
+    },
+    {
+      "acc": "345807240",
+      "symbol": "GOLD",
+      "direction": "SELL",
+      "volume": 0.01,
+      "entry_time": "2026-07-31 13:13:30",
+      "exit_time": "2026-08-02 16:02:01",
+      "entry_price": 4047.81,
+      "exit_price": 4073.43,
+      "duration_min": 3048.5,
+      "pts": -25.62,
+      "pnl_usd": -25.62,
+      "outcome": "LOSS"
+    },
+    {
+      "acc": "390993180",
+      "symbol": "GOLDmicro",
+      "direction": "BUY",
+      "volume": 0.54,
+      "entry_time": "2026-09-09 19:26:10",
+      "exit_time": "2026-09-10 06:16:52",
+      "entry_price": 4416.7,
+      "exit_price": 4369.92,
+      "duration_min": 650.7,
+      "pts": -46.78,
+      "pnl_usd": -25.26,
+      "outcome": "LOSS"
+    },
+    {
+      "acc": "390993180",
+      "symbol": "GOLDmicro",
+      "direction": "BUY",
+      "volume": 0.43,
+      "entry_time": "2026-08-31 23:19:14",
+      "exit_time": "2026-09-01 02:38:01",
+      "entry_price": 4426.31,
+      "exit_price": 4369.95,
+      "duration_min": 198.8,
+      "pts": -56.36,
+      "pnl_usd": -24.23,
+      "outcome": "LOSS"
+    },
+    {
+      "acc": "390993180",
+      "symbol": "GOLDmicro",
+      "direction": "BUY",
+      "volume": 0.22,
+      "entry_time": "2026-09-03 23:08:05",
+      "exit_time": "2026-09-04 07:11:08",
+      "entry_price": 4470.81,
+      "exit_price": 4385.79,
+      "duration_min": 483.0,
+      "pts": -85.02,
+      "pnl_usd": -18.7,
+      "outcome": "LOSS"
+    },
+    {
+      "acc": "390993180",
+      "symbol": "GOLDmicro",
+      "direction": "BUY",
+      "volume": 0.1,
+      "entry_time": "2026-02-11 12:14:56",
+      "exit_time": "2026-02-12 10:26:30",
+      "entry_price": 5072.27,
+      "exit_price": 4892.16,
+      "duration_min": 1331.6,
+      "pts": -180.11,
+      "pnl_usd": -18.01,
+      "outcome": "LOSS"
+    },
+    {
+      "acc": "345807240",
+      "symbol": "GOLD",
+      "direction": "SELL",
+      "volume": 0.01,
+      "entry_time": "2026-07-29 11:35:00",
+      "exit_time": "2026-07-29 12:00:02",
+      "entry_price": 4038.47,
+      "exit_price": 4055.83,
+      "duration_min": 25.0,
+      "pts": -17.36,
+      "pnl_usd": -17.36,
+      "outcome": "LOSS"
+    }
+  ],
+  "best_fragments": [
+    {
+      "acc": "345807240",
+      "symbol": "GOLD",
+      "direction": "BUY",
+      "volume": 0.1,
+      "entry_time": "2026-07-14 11:14:26",
+      "exit_time": "2026-07-14 11:35:13",
+      "entry_price": 4056.84,
+      "exit_price": 4061.73,
+      "duration_min": 20.8,
+      "pts": 4.89,
+      "pnl_usd": 48.9,
+      "outcome": "WIN"
+    },
+    {
+      "acc": "345807240",
+      "symbol": "GOLD",
+      "direction": "BUY",
+      "volume": 0.1,
+      "entry_time": "2026-07-14 11:14:13",
+      "exit_time": "2026-07-14 11:35:11",
+      "entry_price": 4058.09,
+      "exit_price": 4061.57,
+      "duration_min": 21.0,
+      "pts": 3.48,
+      "pnl_usd": 34.8,
+      "outcome": "WIN"
+    },
+    {
+      "acc": "390993180",
+      "symbol": "GOLDmicro",
+      "direction": "BUY",
+      "volume": 0.33,
+      "entry_time": "2026-09-01 23:23:45",
+      "exit_time": "2026-09-02 20:30:16",
+      "entry_price": 4308.29,
+      "exit_price": 4412.03,
+      "duration_min": 1266.5,
+      "pts": 103.74,
+      "pnl_usd": 34.23,
+      "outcome": "WIN"
+    },
+    {
+      "acc": "345807240",
+      "symbol": "GOLD",
+      "direction": "BUY",
+      "volume": 0.1,
+      "entry_time": "2026-07-14 11:12:14",
+      "exit_time": "2026-07-14 11:35:09",
+      "entry_price": 4058.4,
+      "exit_price": 4061.56,
+      "duration_min": 22.9,
+      "pts": 3.16,
+      "pnl_usd": 31.6,
+      "outcome": "WIN"
+    },
+    {
+      "acc": "390993180",
+      "symbol": "GOLDmicro",
+      "direction": "BUY",
+      "volume": 0.1,
+      "entry_time": "2026-07-24 09:10:56",
+      "exit_time": "2026-08-11 10:07:11",
+      "entry_price": 4071.89,
+      "exit_price": 4378.72,
+      "duration_min": 25976.2,
+      "pts": 306.83,
+      "pnl_usd": 30.68,
+      "outcome": "WIN"
+    },
+    {
+      "acc": "390993180",
+      "symbol": "GOLDmicro",
+      "direction": "BUY",
+      "volume": 0.54,
+      "entry_time": "2026-09-10 23:41:02",
+      "exit_time": "2026-09-11 07:58:13",
+      "entry_price": 4335.35,
+      "exit_price": 4390.13,
+      "duration_min": 497.2,
+      "pts": 54.78,
+      "pnl_usd": 29.58,
+      "outcome": "WIN"
+    },
+    {
+      "acc": "390993180",
+      "symbol": "GOLDmicro",
+      "direction": "BUY",
+      "volume": 0.54,
+      "entry_time": "2026-09-10 20:26:04",
+      "exit_time": "2026-09-11 07:22:36",
+      "entry_price": 4325.75,
+      "exit_price": 4380.49,
+      "duration_min": 656.5,
+      "pts": 54.74,
+      "pnl_usd": 29.56,
+      "outcome": "WIN"
+    },
+    {
+      "acc": "390993180",
+      "symbol": "GOLDmicro",
+      "direction": "BUY",
+      "volume": 0.54,
+      "entry_time": "2026-09-08 19:29:44",
+      "exit_time": "2026-09-09 20:04:23",
+      "entry_price": 4372.78,
+      "exit_price": 4416.64,
+      "duration_min": 1474.7,
+      "pts": 43.86,
+      "pnl_usd": 23.68,
+      "outcome": "WIN"
+    },
+    {
+      "acc": "345807240",
+      "symbol": "GOLD",
+      "direction": "BUY",
+      "volume": 0.01,
+      "entry_time": "2026-08-06 07:25:00",
+      "exit_time": "2026-08-06 07:38:45",
+      "entry_price": 4243.27,
+      "exit_price": 4264.92,
+      "duration_min": 13.7,
+      "pts": 21.65,
+      "pnl_usd": 21.65,
+      "outcome": "WIN"
+    },
+    {
+      "acc": "345807240",
+      "symbol": "GOLD",
+      "direction": "BUY",
+      "volume": 0.01,
+      "entry_time": "2026-08-10 07:55:00",
+      "exit_time": "2026-08-10 08:23:35",
+      "entry_price": 4323.6,
+      "exit_price": 4339.28,
+      "duration_min": 28.6,
+      "pts": 15.68,
+      "pnl_usd": 15.68,
+      "outcome": "WIN"
+    }
+  ],
+  "sensitivity_remove_worst_one_not_a_backtest": {
+    "fragments": 892,
+    "estimated_pnl_usd": -147.35,
+    "gross_positive_usd": 1020.01,
+    "gross_negative_usd": 1167.36,
+    "pf_by_sign": 0.8737750137061403,
+    "mean_estimated_pnl_usd": -0.16519058295964126,
+    "original_labels": {
+      "LOSS": 417,
+      "BE": 106,
+      "WIN": 369
+    },
+    "win_rate_original_pct": 41.36771300448431,
+    "positive_fragments_pct": 45.17937219730942
+  }
+}
