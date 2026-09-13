@@ -1,10 +1,10 @@
 //@version=5
-indicator("Aurum Vision [Institutional SMC & Scalper V14.0 BETA]", shorttitle="Aurum Vision BETA", overlay=true, max_lines_count=500, max_labels_count=500, max_boxes_count=500)
+indicator("Aurum Vision [Institutional SMC & Risk Engine V15.0]", shorttitle="Aurum Vision V15", overlay=true, max_lines_count=500, max_labels_count=500, max_boxes_count=500)
 
 // ==============================================================================
-// 🦅 AURUM VISION V14.0 BETA — TRADINGVIEW INSTITUTIONAL SCRIPT
-// Sincronizado al 100% con AurumSniper & AurumSniperMicro MT5 (V14.0 BETA)
-// Motores Integrados: LuxAlgo SMC Pro (SMC.txt) & VEGA OB/Breakers (OB.txt)
+// 🦅 AURUM VISION V15.0 — TRADINGVIEW INSTITUTIONAL SCRIPT
+// Sincronizado al 100% con AurumSniper & AurumSniperMicro MT5 (V15.0 Institutional)
+// Motores: LuxAlgo SMC Pro, VEGA OB/Breakers & V15 Multi-Stage Risk/Micro-Lock
 // ==============================================================================
 
 // ==================== DEFINICIÓN DE COLORES ====================
@@ -22,7 +22,7 @@ c_blue    = color.new(#2962FF, 0)
 c_maroon  = color.new(#880E4F, 0)
 
 // ==================== INPUTS: SMART MONEY CONCEPTS (SMC) ====================
-grp_smc = "=== INSTITUTIONAL SMART MONEY CONCEPTS (SMC V14.0) ==="
+grp_smc = "=== INSTITUTIONAL SMART MONEY CONCEPTS (SMC V15.0) ==="
 inp_use_smc       = input.bool(true, "Activar Motor Institucional SMC", group=grp_smc)
 inp_swing_len     = input.int(5, "Longitud de Swing Pivots (Velas)", minval=2, maxval=20, group=grp_smc)
 inp_show_ob       = input.bool(true, "Mostrar Order Blocks (OB)", group=grp_smc)
@@ -374,7 +374,7 @@ body = math.abs(close - open)
 avg_body = ta.sma(body, 10)
 is_spike = body[1] > (avg_body * 3.0)
 
-// ==================== DISPAROS SNIPER V14.0 BETA ====================
+// ==================== DISPAROS SNIPER V15 INSTITUTIONAL ====================
 // Compras: Tendencia H1 + Descuento + Zona SMC (OB/Breaker/Sweep) + RSI Agotado + ADX + PA + Killzone
 long_cond  = trend_bull and in_discount and (smc_buy_zone or not inp_use_smc) and rsi < rsi_os and adx > adx_min and not is_spike and pa_buy_ok and not is_extreme_news_volatility and in_killzone
 // Ventas: Tendencia H1 + Premium + Zona SMC (OB/Breaker/Sweep) + RSI Agotado + ADX + PA + Killzone
@@ -385,8 +385,8 @@ col_bull = color.new(c_lime, 0)
 col_bear = color.new(c_red, 0)
 
 plot(h1_ema, "EMA 200 H1 Trend", color=trend_bull ? col_bull : col_bear, linewidth=2)
-plotshape(long_cond, "BUY SNIPER BETA", shape.triangleup, location.belowbar, col_bull, size=size.small, text="SNIPER-BETA")
-plotshape(short_cond, "SELL SNIPER BETA", shape.triangledown, location.abovebar, col_bear, size=size.small, text="SNIPER-BETA")
+plotshape(long_cond, "BUY SNIPER V15", shape.triangleup, location.belowbar, col_bull, size=size.small, text="SNIPER-V15")
+plotshape(short_cond, "SELL SNIPER V15", shape.triangledown, location.abovebar, col_bear, size=size.small, text="SNIPER-V15")
 
 // --- VISUALIZADOR DE SETUP ESCALONADO (TP1 / TP2 / TP3 / SL) ---
 var line  ln_sl   = na
@@ -428,7 +428,7 @@ if long_cond or short_cond
     ln_tp3 := line.new(bar_index, tp3_price, bar_index + ext, tp3_price, color=c_lime, width=2)
     
     string ml_txt = inp_use_microlock ? ("\nMicro-Lock (+" + str.tostring(inp_microlock_r, "#.#") + "R / 50% BE): " + str.tostring(ml_price, "#.##")) : ""
-    string txt = (long_cond ? "BUY SNIPER V14 BETA" : "SELL SNIPER V14 BETA") +
+    string txt = (long_cond ? "BUY SNIPER V15" : "SELL SNIPER V15") +
                  "\nEntrada: " + str.tostring(en_price, "#.##") +
                  ml_txt +
                  "\nTP1 (+" + str.tostring(inp_step1_r, "#.#") + "R / BE): " + str.tostring(tp1_price, "#.##") +
@@ -441,7 +441,7 @@ var table dash = table.new(position.top_right, 2, 12, bgcolor = color.new(c_blac
 
 if barstate.islast
     table.cell(dash, 0, 0, "🦅 AURUM VISION", text_color=c_gold, text_size=size.normal)
-    table.cell(dash, 1, 0, "V14.0 BETA SMC", text_color=c_white, text_size=size.normal)
+    table.cell(dash, 1, 0, "V15 INSTITUTIONAL", text_color=c_white, text_size=size.normal)
 
     // Fila 1: Sesión / Killzone
     table.cell(dash, 0, 1, "Killzone Activa", text_color=c_white)
