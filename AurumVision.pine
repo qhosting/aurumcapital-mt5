@@ -1,161 +1,525 @@
-//@version=6
-indicator("Aurum Vision V15 — señales de investigación", overlay=true, max_boxes_count=40, max_bars_back=1100)
-// OHLC confirmation module. Execution, spread, news and account-risk gates belong to MT5.
-emaPeriod = input.int(200, "EMA H1/H4", minval=2)
-useMTF = input.bool(true, "Exigir H4")
-rsiOS = input.int(42, "RSI compra <")
-rsiOB = input.int(58, "RSI venta >")
-adxMin = input.int(20, "ADX mínimo")
-length = input.int(5, "Pivot confirmado", minval=2, maxval=20)
-age = input.int(200, "Replay / edad máxima", minval=40, maxval=500)
-useOB = input.bool(true, "Admitir OB")
-useBreaker = input.bool(true, "Admitir breaker")
-requireFVG = input.bool(false, "Exigir FVG adicional")
-requireSweep = input.bool(false, "Exigir barrido adicional")
-showZones = input.bool(true, "Dibujar zonas (no modifica señales)")
-useSession = input.bool(true, "Ventanas CDMX")
-useStructureSL = input.bool(true, "SL estructural")
-atrMult = input.float(2.0, "SL por ATR", minval=0.1)
-goldMin = input.float(10.0, "Oro mínimo ATR")
-goldMax = input.float(18.0, "Oro máximo SL")
-rr = input.float(2.2, "TP R", minval=0.1)
-if timeframe.period != "15"
-    runtime.error("Perfil V15 validación: usar M15")
+//@version=5
+indicator("Aurum Vision [Institutional SMC & Risk Engine V15.0 Clean]", shorttitle="Aurum Vision V15 Pro", overlay=true, max_lines_count=500, max_labels_count=500, max_boxes_count=500)
 
-// Last CLOSED HTF candle at signal bar close, including the HTF boundary.
-[ePrev, hiPrev, loPrev] = request.security(syminfo.tickerid, "60", [ta.ema(close, emaPeriod)[1], ta.highest(high,20)[1], ta.lowest(low,20)[1]], lookahead=barmerge.lookahead_on)
-[eNow, hiNow, loNow] = request.security(syminfo.tickerid, "60", [ta.ema(close, emaPeriod), ta.highest(high,20), ta.lowest(low,20)], lookahead=barmerge.lookahead_off)
-hPrev = request.security(syminfo.tickerid, "240", ta.ema(close,emaPeriod)[1], lookahead=barmerge.lookahead_on)
-hNow = request.security(syminfo.tickerid, "240", ta.ema(close,emaPeriod), lookahead=barmerge.lookahead_off)
-h1Boundary = time_close == time_close("60")
-h4Boundary = time_close == time_close("240")
-ema = h1Boundary ? eNow : ePrev
-htf = h4Boundary ? hNow : hPrev
-eq = ((h1Boundary ? hiNow : hiPrev) + (h1Boundary ? loNow : loPrev))/2
-rsi = ta.rsi(close,14)
-[diPlus,diMinus,adx] = ta.dmi(14,14)
+// ==============================================================================
+// 🦅 AURUM VISION V15.0 PRO — TRADINGVIEW INSTITUTIONAL SCRIPT (CLEAN EDITION)
+// Sincronizado al 100% con AurumSniper & AurumSniperMicro MT5 (V15.0 Institutional)
+// Mejoras Clave:
+//  - Fondo limpio sin franjas invasivas (Killzone discreta en HUD y puntos de sesión).
+//  - POIs limpios: Cajas de OB, Breakers y FVGs acotadas (sin líneas infinitas).
+//  - Cazas de liquidez (Sweeps EQH/EQL) anti-spam (una sola alerta/etiqueta por swing).
+//  - Disparos Sniper limpios y Setup visual de alta definición.
+// ==============================================================================
+
+// ==================== DEFINICIÓN DE COLORES ====================
+c_gold    = color.new(#FFD700, 0)
+c_white   = color.white
+c_black   = color.black
+c_lime    = color.new(#00E676, 0)
+c_green   = color.green
+c_red     = color.new(#FF1744, 0)
+c_gray    = color.new(#9E9E9E, 0)
+c_orange  = color.new(#FF9100, 0)
+c_cyan    = color.new(#00E5FF, 0)
+c_purple  = color.new(#B388FF, 0)
+c_blue    = color.new(#2979FF, 0)
+
+// ==================== INPUTS: SMART MONEY CONCEPTS (SMC) ====================
+grp_smc = "=== INSTITUTIONAL SMART MONEY CONCEPTS (SMC V15.0) ==="
+inp_use_smc       = input.bool(true, "Activar Motor Institucional SMC", group=grp_smc)
+inp_swing_len     = input.int(5, "Longitud de Swing Pivots (Velas)", minval=2, maxval=20, group=grp_smc)
+inp_show_ob       = input.bool(true, "Mostrar Order Blocks (OB)", group=grp_smc)
+inp_show_breakers = input.bool(true, "Mostrar Breaker Blocks (Inversión Polaridad)", group=grp_smc)
+inp_show_fvg      = input.bool(true, "Mostrar Fair Value Gaps (FVG)", group=grp_smc)
+inp_show_eqhl     = input.bool(true, "Detectar Piscinas de Liquidez (EQH / EQL)", group=grp_smc)
+inp_show_pdz      = input.bool(true, "Mostrar Nivel de Equilibrio (50% Range)", group=grp_smc)
+inp_ob_count      = input.int(3, "Máximo POIs Visibles en Pantalla (2 a 4)", minval=1, maxval=10, group=grp_smc)
+
+// Colores Institucionales con Transparencia Limpia
+col_bull_ob  = input.color(color.new(#00E5FF, 86), "Color Bullish OB", group=grp_smc)
+col_bear_ob  = input.color(color.new(#FF1744, 86), "Color Bearish OB", group=grp_smc)
+col_bull_brk = input.color(color.new(#2979FF, 84), "Color Bullish Breaker", group=grp_smc)
+col_bear_brk = input.color(color.new(#D500F9, 84), "Color Bearish Breaker", group=grp_smc)
+col_fvg_bull = input.color(color.new(#00E676, 88), "Color Bullish FVG", group=grp_smc)
+col_fvg_bear = input.color(color.new(#FF5252, 88), "Color Bearish FVG", group=grp_smc)
+
+// ==================== INPUTS: ESTRATEGIA & FILTROS ====================
+grp_strat = "=== TENDENCIA & FILTROS DE ENTRADA ==="
+inp_ma_per    = input.int(200, "Tendencia Macro H1 (EMA 200)", group=grp_strat) 
+inp_rsi_ob    = input.int(60, "RSI Sobrecompra (> Venta)", group=grp_strat)
+inp_rsi_os    = input.int(42, "RSI Sobrevendido (< Compra)", group=grp_strat)
+inp_adx_min   = input.int(15, "ADX Mínimo de Filtro", group=grp_strat)
+inp_use_mtf   = input.bool(true, "Habilitar Filtro MTF (H4)", group=grp_strat)
+inp_htf       = input.timeframe("240", "Temporalidad Mayor MTF (H4)", group=grp_strat)
+inp_auto_tune = input.bool(true, "Auto-Ajustar por Activo (Gold / Forex)", group=grp_strat)
+
+grp_pa = "=== ACCIÓN DEL PRECIO & ABSORCIÓN ==="
+inp_use_pa_filter   = input.bool(true, "Exigir Confirmación de Vela de Giro / Absorción", group=grp_pa)
+inp_min_wick_ratio  = input.float(0.30, "Ratio Mínimo Mecha de Rechazo (30%)", minval=0.1, maxval=0.7, step=0.05, group=grp_pa)
+
+grp_risk = "=== GESTIÓN DE RIESGO & SALIDAS ESCALONADAS ==="
+inp_use_microlock = input.bool(true, "Activar Micro-Lock Temprano (+0.5R / BE & 50% Parcial)", group=grp_risk)
+inp_microlock_r   = input.float(0.5, "Micro-Lock Nivel (+R)", step=0.1, group=grp_risk)
+inp_step1_r     = input.float(1.0, "Fase 1: Break-Even & 50% Parcial (+R)", step=0.1, group=grp_risk)
+inp_step2_r     = input.float(1.8, "Fase 2: Target Principal (+R)", step=0.1, group=grp_risk)
+inp_step3_r     = input.float(2.2, "Fase 3: Runner Extendido (+R)", step=0.1, group=grp_risk)
+inp_atr_mult    = input.float(2.0, "Multiplicador SL (x ATR)", step=0.1, group=grp_risk)
+inp_gold_min_sl = input.float(10.0, "SL Mínimo en Oro ($ USD)", group=grp_risk)
+inp_gold_max_sl = input.float(18.0, "SL Máximo Techo en Oro ($ USD)", group=grp_risk)
+inp_max_atr_gold= input.float(15.0, "Filtro Anti-Noticias: ATR Máximo en Oro ($ USD)", group=grp_risk)
+
+grp_sess = "=== HORARIOS & KILLZONES INSTITUCIONALES ==="
+inp_show_sessions = input.bool(false, "Sombreado Fondo Completo (Desactivado para Gráfico Limpio)", group=grp_sess)
+inp_show_hud      = input.bool(true, "Mostrar Dashboard HUD Institucional", group=grp_sess)
+
+// ==================== AUTO-AJUSTE DINÁMICO POR ACTIVO ====================
+int rsi_ob         = inp_rsi_ob
+int rsi_os         = inp_rsi_os
+int adx_min        = inp_adx_min
+float atr_mult     = inp_atr_mult
+float min_sl_price = 0.0
+float max_sl_price = 0.0
+bool is_gold_asset = false
+
+if inp_auto_tune
+    string sym = syminfo.ticker
+    if str.contains(sym, "EURUSD")
+        rsi_os   := 45
+        rsi_ob   := 58
+        adx_min  := 15
+        atr_mult := 2.2
+    else if str.contains(sym, "USDJPY")
+        rsi_os   := 44
+        rsi_ob   := 56
+        adx_min  := 15
+        atr_mult := 2.0
+    else if str.contains(sym, "GBPUSD")
+        rsi_os   := 42
+        rsi_ob   := 60
+        adx_min  := 15
+        atr_mult := 2.2
+    else if str.contains(sym, "XAUUSD") or str.contains(sym, "GOLD") or str.contains(sym, "MGC")
+        is_gold_asset := true
+        rsi_os       := 40
+        rsi_ob       := 60
+        adx_min      := 20
+        atr_mult     := 2.0
+        min_sl_price := inp_gold_min_sl
+        max_sl_price := inp_gold_max_sl
+
+// ==================== DETECCIÓN DE HORARIO & KILLZONE (UTC) ====================
+cur_h = hour(time, "UTC")
+cur_m = minute(time, "UTC")
+mins_now = cur_h * 60 + cur_m
+
+// Londres: 07:00 a 16:00 UTC (420 a 960)
+// Overlap: 12:00 a 16:00 UTC (720 a 960)
+// NY:      12:00 a 21:00 UTC (720 a 1260)
+// Asia/Rollover: 21:00 a 07:00 UTC
+in_london  = (mins_now >= 420 and mins_now < 960)
+in_ny      = (mins_now >= 720 and mins_now < 1260)
+in_overlap = (mins_now >= 720 and mins_now < 960)
+in_asia    = (mins_now >= 1260 or mins_now < 420)
+bool in_killzone = (in_london or in_ny) and not in_asia
+
+string sess_activa     = "🛑 FUERA DE KILLZONE (ASIA/ROLLOVER)"
+color  sess_activa_col = c_gray
+
+if in_overlap
+    sess_activa     := "🔥 GOLDEN OVERLAP (LONDRES + NY)"
+    sess_activa_col := c_gold
+else if in_ny
+    sess_activa     := "🇺🇸 NUEVA YORK KILLZONE"
+    sess_activa_col := c_cyan
+else if in_london
+    sess_activa     := "🇬🇧 LONDRES KILLZONE"
+    sess_activa_col := c_purple
+
+// Fondo opcional (por defecto na para un gráfico 100% limpio)
+color session_bg_color = na
+if inp_show_sessions
+    if in_overlap
+        session_bg_color := color.new(#FFD700, 95)
+    else if in_ny
+        session_bg_color := color.new(#00E5FF, 96)
+    else if in_london
+        session_bg_color := color.new(#7C4DFF, 96)
+
+bgcolor(session_bg_color, title="Sombreado de Killzone (Opcional)")
+
+// ==================== INDICADORES BASE ====================
+[h1_ema]              = request.security(syminfo.tickerid, "60", [ta.ema(close[1], inp_ma_per)], lookahead=barmerge.lookahead_off)
+[htf_ema, htf_ema_p2] = request.security(syminfo.tickerid, inp_htf, [ta.ema(close[1], inp_ma_per), ta.ema(close[3], inp_ma_per)], lookahead=barmerge.lookahead_off)
+
+rsi = ta.rsi(close, 14)
+[diplus, diminus, adx] = ta.dmi(14, 14)
 atr = ta.atr(14)
 
-type Zone
+bool is_extreme_news_volatility = is_gold_asset and (atr > inp_max_atr_gold)
+
+// Tendencia Macro
+trend_bull = close > h1_ema
+trend_bear = close < h1_ema
+htf_bull   = not inp_use_mtf or (close > htf_ema and htf_ema >= htf_ema_p2)
+htf_bear   = not inp_use_mtf or (close < htf_ema and htf_ema <= htf_ema_p2)
+
+// ==================== MOTOR INSTITUCIONAL: SMC & POIs LIMPIOS ====================
+type Orderblock
+    box   boxObj
     float top
     float bottom
-    int born
-    bool bull
-    bool breaker
-    bool fvg
-addZone(array<Zone> zs,float top,float bottom,int born,bool bull,bool fvg) =>
-    bool seen = false
-    if array.size(zs)>0
-        for z in zs
-            if z.born==born and z.fvg==fvg and z.bull==bull
-                seen := true
-    if not seen
-        if array.size(zs)>=40
-            array.shift(zs)
-        array.push(zs,Zone.new(top,bottom,born,bull,false,fvg))
+    int   startBar
+    bool  isBullish
+    bool  isBreaker
+    bool  isMitigated
 
-array<Zone> zs = array.new<Zone>()
-float swingHigh = na
-float swingLow = na
-bool highBroken = false
-bool lowBroken = false
-bool sweepBuy = false
-bool sweepSell = false
-bool ready = bar_index>=age+2*length+4 and not na(htf)
-if barstate.isconfirmed and ready
-    // Rebuild the same finite causal history as the EA; drawings never feed back.
-    for s=age-1 to 0
-        int pivot = s+length
-        bool sh = true
-        bool sl = true
-        for j=1 to length
-            if high[pivot-j]>=high[pivot] or high[pivot+j]>=high[pivot]
-                sh := false
-            if low[pivot-j]<=low[pivot] or low[pivot+j]<=low[pivot]
-                sl := false
-        if sh
-            swingHigh := high[pivot]
-            highBroken := false
-        if sl
-            swingLow := low[pivot]
-            lowBroken := false
-        sweepBuy := not na(swingLow) and low[s]<swingLow and close[s]>=swingLow
-        sweepSell := not na(swingHigh) and high[s]>swingHigh and close[s]<=swingHigh
-        if array.size(zs)>0
-            for j=array.size(zs)-1 to 0
-                z = array.get(zs,j)
-                bool crossed = z.bull ? close[s]<z.bottom : close[s]>z.top
-                bool filled = z.fvg and (z.bull ? low[s]<=z.bottom : high[s]>=z.top)
-                if bar_index-s-z.born>age or filled or (crossed and z.breaker)
-                    array.remove(zs,j)
-                else if crossed and not z.fvg
-                    z.breaker := true
-                    z.bull := not z.bull
-        if not na(swingHigh) and not highBroken and close[s]>swingHigh
-            highBroken := true
-            for k=s+1 to s+30
-                if close[k]<open[k]
-                    addZone(zs,high[k],low[k],bar_index-k,true,false)
-                    break
-        if not na(swingLow) and not lowBroken and close[s]<swingLow
-            lowBroken := true
-            for k=s+1 to s+30
-                if close[k]>open[k]
-                    addZone(zs,high[k],low[k],bar_index-k,false,false)
-                    break
-        if low[s]>high[s+2]
-            addZone(zs,low[s],high[s+2],bar_index-s-1,true,true)
-        if high[s]<low[s+2]
-            addZone(zs,low[s+2],high[s],bar_index-s-1,false,true)
+type FvgBox
+    box   boxObj
+    float top
+    float bottom
+    bool  isBullish
+    bool  isMitigated
 
-bool bullOB = false
-bool bearOB = false
-bool bullFVG = false
-bool bearFVG = false
-float buyEdge = na
-float sellEdge = na
-if array.size(zs)>0
-    for i=array.size(zs)-1 to 0
-        z = array.get(zs,i)
-        if low<=z.top and high>=z.bottom
-            if z.fvg
-                bullFVG := bullFVG or z.bull
-                bearFVG := bearFVG or not z.bull
-            else if (z.breaker and useBreaker) or (not z.breaker and useOB)
-                if z.bull
-                    if not bullOB
-                        buyEdge := z.bottom
-                    bullOB := true
+var array<Orderblock> orderblocks = array.new<Orderblock>()
+var array<FvgBox>     fvgBoxes    = array.new<FvgBox>()
+
+// Detección de Swings
+isSwingHigh = ta.pivothigh(high, inp_swing_len, inp_swing_len)
+isSwingLow  = ta.pivotlow(low,   inp_swing_len, inp_swing_len)
+
+var float lastSwingHigh     = na
+var float lastSwingLow      = na
+var int   lastSwingHighBar  = na
+var int   lastSwingLowBar   = na
+var bool  swingHighBreached = false
+var bool  swingLowBreached  = false
+var string market_structure = "CONSOLIDACIÓN"
+
+// Barreras anti-duplicación para Sweeps
+var int   last_eqh_sweep_bar = na
+var int   last_eql_sweep_bar = na
+
+if not na(isSwingHigh)
+    lastSwingHigh     := isSwingHigh
+    lastSwingHighBar  := bar_index - inp_swing_len
+    swingHighBreached := false
+
+if not na(isSwingLow)
+    lastSwingLow      := isSwingLow
+    lastSwingLowBar   := bar_index - inp_swing_len
+    swingLowBreached  := false
+
+// Rupturas Estructurales (BOS / CHoCH)
+bullishMSB = not na(lastSwingHigh) and not swingHighBreached and close > lastSwingHigh
+bearishMSB = not na(lastSwingLow)  and not swingLowBreached  and close < lastSwingLow
+
+if bullishMSB
+    swingHighBreached := true
+    market_structure  := "BULLISH BOS / CHoCH"
+
+if bearishMSB
+    swingLowBreached := true
+    market_structure := "BEARISH BOS / CHoCH"
+
+// 1. Creación de Order Blocks (OBs) - Acotados a la derecha (sin líneas infinitas)
+if inp_use_smc and inp_show_ob
+    if bullishMSB
+        for i = 1 to 25
+            if close[i] < open[i]
+                newBox = box.new(
+                     left         = bar_index - i,
+                     top          = high[i],
+                     right        = bar_index + 10,
+                     bottom       = low[i],
+                     border_color = color.new(#00E5FF, 40),
+                     bgcolor      = col_bull_ob,
+                     border_width = 1,
+                     extend       = extend.none)
+                array.push(orderblocks, Orderblock.new(newBox, high[i], low[i], bar_index - i, true, false, false))
+                break
+
+    if bearishMSB
+        for i = 1 to 25
+            if close[i] > open[i]
+                newBox = box.new(
+                     left         = bar_index - i,
+                     top          = high[i],
+                     right        = bar_index + 10,
+                     bottom       = low[i],
+                     border_color = color.new(#FF1744, 40),
+                     bgcolor      = col_bear_ob,
+                     border_width = 1,
+                     extend       = extend.none)
+                array.push(orderblocks, Orderblock.new(newBox, high[i], low[i], bar_index - i, false, false, false))
+                break
+
+// 2. Breakers y Mitigación Dinámica
+if inp_use_smc and array.size(orderblocks) > 0
+    for i = array.size(orderblocks) - 1 to 0
+        ob = array.get(orderblocks, i)
+        if not ob.isMitigated
+            // Si el precio lo atraviesa
+            if ob.isBullish and close < ob.bottom
+                if inp_show_breakers and not ob.isBreaker
+                    ob.isBreaker := true
+                    ob.isBullish := false
+                    box.set_bgcolor(ob.boxObj, col_bear_brk)
+                    box.set_border_color(ob.boxObj, color.new(#D500F9, 30))
+                    box.set_right(ob.boxObj, bar_index + 10)
+                    array.set(orderblocks, i, ob)
                 else
-                    if not bearOB
-                        sellEdge := z.top
-                    bearOB := true
-int minuteCDMX = hour(time_close,"America/Mexico_City")*60+minute(time_close,"America/Mexico_City")
-int dow = dayofweek(time_close,"America/Mexico_City")
-bool sessionOK = dow!=dayofweek.saturday and dow!=dayofweek.sunday and (not useSession or (minuteCDMX>=75 and minuteCDMX<330) or (minuteCDMX>=390 and minuteCDMX<690))
-span = high-low
-paBuy = close>open or (span>0 and (math.min(open,close)-low)/span>=0.30)
-paSell = close<open or (span>0 and (high-math.max(open,close))/span>=0.30)
-longSignal = barstate.isconfirmed and ready and sessionOK and close>ema and (not useMTF or close>htf) and close<eq and rsi<rsiOS and adx>=adxMin and span>0 and span<=2.8*atr and paBuy and bullOB and (not requireFVG or bullFVG) and (not requireSweep or sweepBuy)
-shortSignal = barstate.isconfirmed and ready and sessionOK and close<ema and (not useMTF or close<htf) and close>eq and rsi>rsiOB and adx>=adxMin and span>0 and span<=2.8*atr and paSell and bearOB and (not requireFVG or bearFVG) and (not requireSweep or sweepSell)
-plot(ema,"EMA H1 cerrada",color=color.orange)
-plot(eq,"Equilibrio 20 H1 cerradas",color=color.gray)
-plotshape(longSignal,"Candidato BUY",shape.triangleup,location.belowbar,color.lime,size=size.tiny)
-plotshape(shortSignal,"Candidato SELL",shape.triangledown,location.abovebar,color.red,size=size.tiny)
-var array<box> drawings = array.new<box>()
-if barstate.islast and barstate.isconfirmed
-    for b in drawings
-        box.delete(b)
-    array.clear(drawings)
-    if showZones and array.size(zs)>0
-        for z in zs
-            color c = z.breaker ? color.blue : z.bull ? color.green : color.red
-            array.push(drawings,box.new(z.born,z.top,bar_index+5,z.bottom,bgcolor=color.new(c,85),border_color=c))
-// Indicative levels exclude broker spread/stops. MT5 must validate executable prices.
-bool gold = str.contains(str.upper(syminfo.ticker),"GOLD") or str.contains(str.upper(syminfo.ticker),"XAU")
-dist = gold ? math.max(atr*atrMult,goldMin) : atr*atrMult
-buySL = useStructureSL ? buyEdge-2*syminfo.mintick : close-dist
-sellSL = useStructureSL ? sellEdge+2*syminfo.mintick : close+dist
-plot(longSignal and (not gold or close-buySL<=goldMax) ? buySL : shortSignal and (not gold or sellSL-close<=goldMax) ? sellSL : na,"SL orientativo sin spread",color=color.red,style=plot.style_circles)
-alertcondition(longSignal,"Aurum V15 BUY candidato","Candidato OHLC BUY {{ticker}}. Validar riesgo, noticias y ejecución en MT5; no es orden.")
-alertcondition(shortSignal,"Aurum V15 SELL candidato","Candidato OHLC SELL {{ticker}}. Validar riesgo, noticias y ejecución en MT5; no es orden.")
+                    ob.isMitigated := true
+                    box.set_right(ob.boxObj, bar_index)
+                    array.set(orderblocks, i, ob)
+            else if not ob.isBullish and close > ob.top
+                if inp_show_breakers and not ob.isBreaker
+                    ob.isBreaker := true
+                    ob.isBullish := true
+                    box.set_bgcolor(ob.boxObj, col_bull_brk)
+                    box.set_border_color(ob.boxObj, color.new(#2979FF, 30))
+                    box.set_right(ob.boxObj, bar_index + 10)
+                    array.set(orderblocks, i, ob)
+                else
+                    ob.isMitigated := true
+                    box.set_right(ob.boxObj, bar_index)
+                    array.set(orderblocks, i, ob)
+            else
+                // Extender suavemente la caja mientras sigue viva
+                box.set_right(ob.boxObj, bar_index + 8)
+
+// Limitar cantidad de OBs en pantalla a solo los más recientes y relevantes
+while array.size(orderblocks) > inp_ob_count
+    old_ob = array.shift(orderblocks)
+    box.delete(old_ob.boxObj)
+
+// 3. Fair Value Gaps (FVG) Limpios (Se borran o cortan al mitigarse)
+bool is_bull_fvg = (low > high[2]) and inp_use_smc and inp_show_fvg
+bool is_bear_fvg = (high < low[2]) and inp_use_smc and inp_show_fvg
+
+if is_bull_fvg
+    box_fvg = box.new(bar_index - 1, low, bar_index + 10, high[2], border_color=color.new(#00E676, 50), bgcolor=col_fvg_bull, border_style=line.style_dashed, extend=extend.none)
+    array.push(fvgBoxes, FvgBox.new(box_fvg, low, high[2], true, false))
+
+if is_bear_fvg
+    box_fvg = box.new(bar_index - 1, low[2], bar_index + 10, high, border_color=color.new(#FF5252, 50), bgcolor=col_fvg_bear, border_style=line.style_dashed, extend=extend.none)
+    array.push(fvgBoxes, FvgBox.new(box_fvg, low[2], high, false, false))
+
+// Mitigación de FVG
+if array.size(fvgBoxes) > 0
+    for i = array.size(fvgBoxes) - 1 to 0
+        fvg = array.get(fvgBoxes, i)
+        if not fvg.isMitigated
+            // Mitigado si el precio cierra dentro o lo llena
+            if fvg.isBullish and low <= fvg.bottom
+                fvg.isMitigated := true
+                box.set_right(fvg.boxObj, bar_index)
+                array.set(fvgBoxes, i, fvg)
+            else if not fvg.isBullish and high >= fvg.top
+                fvg.isMitigated := true
+                box.set_right(fvg.boxObj, bar_index)
+                array.set(fvgBoxes, i, fvg)
+            else
+                box.set_right(fvg.boxObj, bar_index + 8)
+
+while array.size(fvgBoxes) > 3
+    old_fvg = array.shift(fvgBoxes)
+    box.delete(old_fvg.boxObj)
+
+// 4. Piscinas de Liquidez y Cazas de Stops (EQH / EQL Sweeps) - SIN REPETICIÓN
+bool eqh_sweep = false
+bool eql_sweep = false
+
+if inp_use_smc and inp_show_eqhl and not na(lastSwingHigh) and not na(lastSwingLow)
+    // Solo disparar UNA vez por cada evento de toma de liquidez
+    if high > lastSwingHigh and close <= lastSwingHigh and (na(last_eqh_sweep_bar) or (bar_index - last_eqh_sweep_bar > 8))
+        eqh_sweep := true
+        last_eqh_sweep_bar := bar_index
+    if low < lastSwingLow and close >= lastSwingLow and (na(last_eql_sweep_bar) or (bar_index - last_eql_sweep_bar > 8))
+        eql_sweep := true
+        last_eql_sweep_bar := bar_index
+
+plotshape(eql_sweep, "Barrido EQL (Liquidity Sweep)", shape.labelup, location.belowbar, c_lime, text="SWEEP", textcolor=c_black, size=size.tiny)
+plotshape(eqh_sweep, "Barrido EQH (Liquidity Sweep)", shape.labeldown, location.abovebar, c_red, text="SWEEP", textcolor=c_white, size=size.tiny)
+
+// 5. Rango Premium / Descuento (50% Range)
+h1_high_range = ta.highest(high, 40)
+h1_low_range  = ta.lowest(low, 40)
+eq_level      = (h1_high_range + h1_low_range) * 0.5
+
+bool in_discount = close <= eq_level // Barato -> Compras
+bool in_premium  = close >= eq_level // Caro   -> Ventas
+
+plot(inp_show_pdz ? eq_level : na, "Equilibrio (50%)", color=color.new(c_gold, 60), style=plot.style_linebr, linewidth=1)
+
+// ==================== VERIFICACIÓN DE CONTACTO CON ZONAS SMC ====================
+bool at_bull_ob      = false
+bool at_bear_ob      = false
+bool at_bull_breaker = false
+bool at_bear_breaker = false
+
+if array.size(orderblocks) > 0
+    for i = 0 to array.size(orderblocks) - 1
+        ob = array.get(orderblocks, i)
+        if not ob.isMitigated and low <= ob.top and high >= ob.bottom
+            if ob.isBreaker
+                if ob.isBullish
+                    at_bull_breaker := true
+                else
+                    at_bear_breaker := true
+            else
+                if ob.isBullish
+                    at_bull_ob := true
+                else
+                    at_bear_ob := true
+
+bool smc_buy_zone  = at_bull_ob or at_bull_breaker or eql_sweep
+bool smc_sell_zone = at_bear_ob or at_bear_breaker or eqh_sweep
+
+// ==================== ACCIÓN DEL PRECIO & ABSORCIÓN ====================
+candle_range = high[1] - low[1]
+lower_wick = math.min(open[1], close[1]) - low[1]
+upper_wick = high[1] - math.max(open[1], close[1])
+
+bool pa_buy_ok  = true
+bool pa_sell_ok = true
+
+if inp_use_pa_filter and candle_range > 0
+    bool bull_close  = (close[1] > open[1])
+    bool bear_close  = (close[1] < open[1])
+    bool bull_pinbar = (lower_wick / candle_range) >= inp_min_wick_ratio
+    bool bear_pinbar = (upper_wick / candle_range) >= inp_min_wick_ratio
+    pa_buy_ok  := bull_close or bull_pinbar
+    pa_sell_ok := bear_close or bear_pinbar
+
+// Filtro Anti-Spike
+body = math.abs(close - open)
+avg_body = ta.sma(body, 10)
+is_spike = body[1] > (avg_body * 3.0)
+
+// ==================== DISPAROS SNIPER V15 INSTITUTIONAL ====================
+long_cond_raw  = trend_bull and in_discount and (smc_buy_zone or not inp_use_smc) and rsi < rsi_os and adx > adx_min and not is_spike and pa_buy_ok and not is_extreme_news_volatility and in_killzone
+short_cond_raw = trend_bear and in_premium  and (smc_sell_zone or not inp_use_smc) and rsi > rsi_ob and adx > adx_min and not is_spike and pa_sell_ok and not is_extreme_news_volatility and in_killzone
+
+// Evitar alertas duplicadas en velas consecutivas
+var int last_trade_bar = na
+bool cooldown_ok = na(last_trade_bar) or (bar_index - last_trade_bar > 4)
+
+long_cond  = long_cond_raw and cooldown_ok
+short_cond = short_cond_raw and cooldown_ok
+
+if long_cond or short_cond
+    last_trade_bar := bar_index
+
+// Señales Limpias en Gráfico
+plot(h1_ema, "EMA 200 H1 Trend", color=trend_bull ? color.new(c_lime, 30) : color.new(c_red, 30), linewidth=2)
+plotshape(long_cond, "BUY SNIPER V15", shape.triangleup, location.belowbar, c_lime, size=size.small, text="BUY-V15")
+plotshape(short_cond, "SELL SNIPER V15", shape.triangledown, location.abovebar, c_red, size=size.small, text="SELL-V15")
+
+// --- VISUALIZADOR DE SETUP ESCALONADO LIMPIO (TP1 / TP2 / SL) ---
+var line  ln_sl   = na
+var line  ln_ml   = na
+var line  ln_tp1  = na
+var line  ln_tp2  = na
+var line  ln_en   = na
+var label lbl_setup = na
+
+if long_cond or short_cond
+    line.delete(ln_sl)
+    line.delete(ln_ml)
+    line.delete(ln_tp1)
+    line.delete(ln_tp2)
+    line.delete(ln_en)
+    label.delete(lbl_setup)
+    
+    float en_price  = close
+    float sl_dist   = math.max(atr * atr_mult, min_sl_price)
+    if max_sl_price > 0 and sl_dist > max_sl_price
+        sl_dist := max_sl_price
+    
+    float sl_price  = long_cond ? en_price - sl_dist : en_price + sl_dist
+    float ml_price  = long_cond ? en_price + (sl_dist * inp_microlock_r) : en_price - (sl_dist * inp_microlock_r)
+    float tp1_price = long_cond ? en_price + (sl_dist * inp_step1_r) : en_price - (sl_dist * inp_step1_r)
+    float tp2_price = long_cond ? en_price + (sl_dist * inp_step2_r) : en_price - (sl_dist * inp_step2_r)
+    color sig_col   = long_cond ? c_lime : c_red
+    
+    int ext = 14
+    ln_en  := line.new(bar_index, en_price, bar_index + ext, en_price, color=color.new(c_white, 40), style=line.style_dotted, width=1)
+    ln_sl  := line.new(bar_index, sl_price, bar_index + ext, sl_price, color=c_red, width=2)
+    if inp_use_microlock
+        ln_ml  := line.new(bar_index, ml_price, bar_index + ext, ml_price, color=c_orange, style=line.style_dotted, width=1)
+    ln_tp1 := line.new(bar_index, tp1_price, bar_index + ext, tp1_price, color=c_gold, style=line.style_dashed, width=2)
+    ln_tp2 := line.new(bar_index, tp2_price, bar_index + ext, tp2_price, color=c_lime, width=2)
+    
+    string ml_txt = inp_use_microlock ? ("\nMicro-Lock: " + str.tostring(ml_price, "#.##")) : ""
+    string txt = (long_cond ? "BUY SNIPER V15" : "SELL SNIPER V15") +
+                 "\nEntrada: " + str.tostring(en_price, "#.##") +
+                 ml_txt +
+                 "\nTP1 (+1R / BE): " + str.tostring(tp1_price, "#.##") +
+                 "\nTP2 (+1.8R): " + str.tostring(tp2_price, "#.##") +
+                 "\nSL (1R): " + str.tostring(sl_price, "#.##")
+    lbl_setup := label.new(bar_index + ext, en_price, txt, color=color.new(c_black, 20), textcolor=sig_col, style=label.style_label_left, size=size.small)
+
+// ==================== DASHBOARD HUD EN TIEMPO REAL ====================
+var table dash = table.new(position.top_right, 2, 12, bgcolor = color.new(c_black, 20), border_width=1, border_color=color.new(c_gray, 60))
+
+if barstate.islast and inp_show_hud
+    table.cell(dash, 0, 0, "🦅 AURUM VISION", text_color=c_gold, text_size=size.normal)
+    table.cell(dash, 1, 0, "V15 INSTITUTIONAL", text_color=c_white, text_size=size.normal)
+
+    // Fila 1: Sesión / Killzone
+    table.cell(dash, 0, 1, "Killzone Activa", text_color=c_white)
+    table.cell(dash, 1, 1, sess_activa, text_color=sess_activa_col)
+
+    // Fila 2: Estructura SMC
+    table.cell(dash, 0, 2, "Estructura SMC", text_color=c_white)
+    table.cell(dash, 1, 2, market_structure, text_color= str.contains(market_structure, "BULLISH") ? c_lime : str.contains(market_structure, "BEARISH") ? c_red : c_gray)
+
+    // Fila 3: Rango Premium / Descuento
+    table.cell(dash, 0, 3, "Rango Institucional", text_color=c_white)
+    table.cell(dash, 1, 3, in_discount ? "DESCUENTO (Comprar)" : "PREMIUM (Vender)", text_color= in_discount ? c_lime : c_red)
+
+    // Fila 4: Confluencia SMC
+    table.cell(dash, 0, 4, "Confluencia SMC", text_color=c_white)
+    string smc_info = at_bull_ob ? "BULLISH OB" : at_bear_ob ? "BEARISH OB" : at_bull_breaker ? "BULL BREAKER" : at_bear_breaker ? "BEAR BREAKER" : "SIN ZONA ACTIVA"
+    color smc_col   = (at_bull_ob or at_bull_breaker) ? c_lime : (at_bear_ob or at_bear_breaker) ? c_red : c_gray
+    table.cell(dash, 1, 4, smc_info, text_color=smc_col)
+
+    // Fila 5: RSI (M15)
+    table.cell(dash, 0, 5, "RSI (M15)", text_color=c_white)
+    color rsi_col = rsi < rsi_os ? c_lime : rsi > rsi_ob ? c_red : c_gray
+    table.cell(dash, 1, 5, str.tostring(rsi, "#.##"), text_color=rsi_col)
+
+    // Fila 6: Tendencia H1 (EMA 200)
+    table.cell(dash, 0, 6, "Trend H1 (EMA 200)", text_color=c_white)
+    table.cell(dash, 1, 6, trend_bull ? "ALCISTA (BUY)" : "BAJISTA (SELL)", text_color= trend_bull ? c_lime : c_red)
+
+    // Fila 7: Filtro MTF (H4)
+    table.cell(dash, 0, 7, "Trend MTF (H4)", text_color=c_white)
+    string mtf_txt = not inp_use_mtf ? "DESACTIVADO" : htf_bull ? "ALCISTA (✅)" : htf_bear ? "BAJISTA (✅)" : "CONFLICTO (❌)"
+    color  mtf_col = not inp_use_mtf ? c_gray : htf_bull ? c_lime : htf_bear ? c_red : c_orange
+    table.cell(dash, 1, 7, mtf_txt, text_color=mtf_col)
+
+    // Fila 8: Acción del Precio
+    table.cell(dash, 0, 8, "Acción Precio (PA)", text_color=c_white)
+    table.cell(dash, 1, 8, pa_buy_ok or pa_sell_ok ? "✅ RECHAZO CONFIRMADO" : "⏳ ESPERANDO GIRO", text_color= pa_buy_ok or pa_sell_ok ? c_lime : c_orange)
+
+    // Fila 9: ADX
+    table.cell(dash, 0, 9, "ADX Fuerza", text_color=c_white)
+    bool adx_ok = adx > inp_adx_min
+    table.cell(dash, 1, 9, str.tostring(adx, "#.##") + (adx_ok ? " (ACTIVO)" : " (DORMIDO)"), text_color = adx_ok ? c_lime : c_orange)
+
+    // Fila 10: Fases TP
+    table.cell(dash, 0, 10, "Fases de Salida", text_color=c_white)
+    table.cell(dash, 1, 10, "+" + str.tostring(inp_step1_r, "#.#") + "R (50%) ➔ +" + str.tostring(inp_step2_r, "#.#") + "R (40%)", text_color=c_gold)
+
+    // Fila 11: Techo SL
+    table.cell(dash, 0, 11, "Gestión de SL", text_color=c_white)
+    table.cell(dash, 1, 11, is_gold_asset ? "$10 - $18 USD Capped" : "2.0x ATR Dinámico", text_color=c_cyan)
+
+// ==================== ALERTAS TRADINGVIEW ====================
+alertcondition(long_cond, title="🦅 AURUM COMPRA (BUY) V15", message="🦅 AURUM SNIPER BUY V15 en {{ticker}} @ {{close}} | Zona: Descuento + SMC OB/Breaker | TP1: +1.0R (BE) | TP2: +1.8R")
+alertcondition(short_cond, title="🦅 AURUM VENTA (SELL) V15", message="🦅 AURUM SNIPER SELL V15 en {{ticker}} @ {{close}} | Zona: Premium + SMC OB/Breaker | TP1: +1.0R (BE) | TP2: +1.8R")
+alertcondition(eql_sweep, title="🪤 BARRIDO DE LIQUIDEZ EQL", message="🪤 Cazaron stops de compradores (EQL Sweep) en {{ticker}} @ {{close}}.")
+alertcondition(eqh_sweep, title="🪤 BARRIDO DE LIQUIDEZ EQH", message="🪤 Cazaron stops de vendedores (EQH Sweep) en {{ticker}} @ {{close}}.")
+alertcondition(at_bull_ob or at_bull_breaker, title="🧱 PRECIO EN BULLISH OB/BREAKER", message="Precio tocando soporte institucional en {{ticker}} @ {{close}}.")
+alertcondition(at_bear_ob or at_bear_breaker, title="🧱 PRECIO EN BEARISH OB/BREAKER", message="Precio tocando resistencia institucional en {{ticker}} @ {{close}}.")
