@@ -85,18 +85,18 @@ input bool     InpAutoSetManualSLTP  = true;
 input bool     InpAllowRangeTrading       = true;  // [V13.70] Permitir compras/ventas en Soporte/Resistencia durante consolidación
 
 input bool     InpUseStepTrailing    = true; // [V13.70] Habilitar Fases (BE 1.3R -> TP 2.2R -> Runner 3.0R)
-input bool     InpUseMicroLock05R    = true; // [V14.3] Micro-Lock Temprano a +0.5R (Asegura parcial y BE en scalps rápidos de Oro)
-input double   InpMicroLock05Trigger = 0.5;  // [V14.3] Nivel R para Micro-Lock (0.5R = ~$3.5-$4 USD de ganancia)
-input double   InpMicroLock05Pct     = 50.0; // [V14.3] Porcentaje de cierre parcial en Micro-Lock (50% del lote)
-input int      InpMicroLockLockPips  = 10;   // [V14.3] Pips de ganancia asegurada en SL tras Micro-Lock (+1 pip)
-input double   InpStep1_TriggerR     = 1.3;  // [V13.70] Fase 1: Activar Break-Even protegido y 40% Parcial (+1.3R)
-input double   InpStep1_5_TriggerR   = 1.0;  // [V14.1] Fase 1.5: Asegurar Ganancia (+1.0R)
-input double   InpStep1_5_LockR      = 0.4;  // [V14.1] Fase 1.5: Ganancia asegurada (+0.4R)
-input double   InpStep2_TriggerR     = 2.2;  // [V13.70] Fase 2: TP Principal y Asegurar Ganancia (+2.2R)
-input double   InpStep2_LockR        = 1.2;  // [V13.70] Fase 2: Ganancia bloqueada (+1.2R)
-input double   InpStep3_TriggerR     = 3.0;  // [V13.70] Fase 3: Nivel Runner Extendido (+3.0R)
-input double   InpStep3_LockR        = 2.0;  // [V13.70] Fase 3: Ganancia bloqueada (+2.0R)
-input bool     InpCloseOnTP3         = true; // [V12.97] Cerrar 100% de la posición en TP2/TP3
+input bool     InpUseMicroLock05R    = true; // [V15.0] Micro-Lock Temprano a +0.5R (Asegura parcial y BE en scalps)
+input double   InpMicroLock05Trigger = 0.5;  // [V15.0] Nivel R para Micro-Lock (0.5R)
+input double   InpMicroLock05Pct     = 50.0; // [V15.0] Porcentaje de cierre parcial en Micro-Lock (50% del lote)
+input int      InpMicroLockLockPips  = 10;   // [V15.0] Pips de ganancia asegurada en SL tras Micro-Lock (+1 pip)
+input double   InpStep1_TriggerR     = 1.0;  // [V15.0] Fase 1: Break-Even protegido y 50% Parcial (+1.0R)
+input double   InpStep1_5_TriggerR   = 1.0;  // [V15.0] Fase 1.5: Asegurar Ganancia (+1.0R)
+input double   InpStep1_5_LockR      = 0.4;  // [V15.0] Fase 1.5: Ganancia asegurada (+0.4R)
+input double   InpStep2_TriggerR     = 1.8;  // [V15.0] Fase 2: TP Principal (+1.8R)
+input double   InpStep2_LockR        = 1.0;  // [V15.0] Fase 2: Ganancia bloqueada (+1.0R)
+input double   InpStep3_TriggerR     = 2.2;  // [V15.0] Fase 3: Nivel Runner Extendido (+2.2R)
+input double   InpStep3_LockR        = 1.8;  // [V15.0] Fase 3: Ganancia bloqueada (+1.8R)
+input bool     InpCloseOnTP3         = true; // [V15.0] Cerrar 100% de la posición en TP2/TP3
 input bool     InpStepRunnerAbove3R  = false;// [V12.9] Runner infinito sobre 3.0R (solo si InpCloseOnTP3 = false)
 input bool     InpUseCandleTrailing  = true; // [V14.1] Candle-Trailing Stop tras N velas en profit
 input int      InpCandleTrailAfterBars = 4;  // [V14.1] Activar Candle-Trail tras N velas en ganancia (optimizado: 4 velas)
@@ -399,11 +399,12 @@ void MarkPartialClosed(ulong ticket) {
 //| === INSTITUTIONAL SMART MONEY CONCEPTS (SMC) & ORDER BLOCKS ===   |
 //| Based on SMC.txt (LuxAlgo Pro) & OB.txt (VEGA OB / Breakers)      |
 //+------------------------------------------------------------------+
-input group "=== INSTITUTIONAL SMART MONEY CONCEPTS (V14.0 BETA) ==="
+input group "=== INSTITUTIONAL SMART MONEY CONCEPTS (V15.0) ==="
 input bool     InpUseSMCStructures         = true;  // Activar Motor SMC (BOS, CHoCH, OB, Breakers)
 input int      InpSwingLength              = 5;     // Longitud de Swing High/Low (VEGA OB)
 input bool     InpUseOrderBlocks           = true;  // Confluencia en Order Blocks (OB)
 input bool     InpUseBreakerBlocks         = true;  // Confluencia en Breaker Blocks (Inversion de Polaridad)
+input bool     InpUseChopControl           = true;  // [V15] Chop Control: Eliminar Breakers atravesados en falso (OB.txt)
 input bool     InpUseFVGFilter             = true;  // Confluencia en Fair Value Gaps (FVG)
 input bool     InpUseLiquiditySweeps       = true;  // Cazas de Liquidez (Equal Highs/Lows Sweeps)
 input bool     InpDrawSMCVisuals           = true;  // Dibujar Zonas SMC en el grafico de MT5
@@ -614,6 +615,15 @@ void UpdateSMCStructures() {
             g_order_blocks[b].is_breaker = true;
             g_order_blocks[b].is_bullish = true; // Ahora actua como soporte alcista
             g_order_blocks[b].box_name = "smc_brk_" + IntegerToString(b);
+         }
+      }
+      else if(InpUseChopControl && g_order_blocks[b].is_breaker) {
+         // Chop Control de OB.txt (lineas 195-209): si el precio vuelve a atravesar el breaker, se mitiga/elimina
+         if(g_order_blocks[b].was_originally_bullish && close1 > g_order_blocks[b].top) {
+            g_order_blocks[b].is_mitigated = true;
+         }
+         else if(!g_order_blocks[b].was_originally_bullish && close1 < g_order_blocks[b].bottom) {
+            g_order_blocks[b].is_mitigated = true;
          }
       }
    }
