@@ -266,8 +266,6 @@ if inp_use_smc and inp_show_ob
                      text         = "+OB",
                      text_size    = size.tiny,
                      text_color   = color.white,
-                     text_valign  = text.valign_center,
-                     text_halign  = text.halign_right,
                      extend       = extend.none)
                 array.push(orderblocks, Orderblock.new(newBox, high[i], low[i], bar_index - i, true, false, true, false))
                 break
@@ -286,8 +284,6 @@ if inp_use_smc and inp_show_ob
                      text         = "-OB",
                      text_size    = size.tiny,
                      text_color   = color.white,
-                     text_valign  = text.valign_center,
-                     text_halign  = text.halign_right,
                      extend       = extend.none)
                 array.push(orderblocks, Orderblock.new(newBox, high[i], low[i], bar_index - i, false, false, false, false))
                 break
@@ -351,11 +347,11 @@ bool is_bull_fvg = (low > high[2]) and inp_use_smc and inp_show_fvg
 bool is_bear_fvg = (high < low[2]) and inp_use_smc and inp_show_fvg
 
 if is_bull_fvg
-    box_fvg = box.new(bar_index - 1, low, bar_index + 10, high[2], border_color=color.new(#00E676, 50), bgcolor=col_fvg_bull, border_style=line.style_dashed, text="+FVG", text_size=size.tiny, text_color=color.white, text_valign=text.valign_center, text_halign=text.halign_right, extend=extend.none)
+    box_fvg = box.new(bar_index - 1, low, bar_index + 10, high[2], border_color=color.new(#00E676, 50), bgcolor=col_fvg_bull, border_style=line.style_dashed, text="+FVG", text_size=size.tiny, text_color=color.white, extend=extend.none)
     array.push(fvgBoxes, FvgBox.new(box_fvg, low, high[2], true, false))
 
 if is_bear_fvg
-    box_fvg = box.new(bar_index - 1, low[2], bar_index + 10, high, border_color=color.new(#FF5252, 50), bgcolor=col_fvg_bear, border_style=line.style_dashed, text="-FVG", text_size=size.tiny, text_color=color.white, text_valign=text.valign_center, text_halign=text.halign_right, extend=extend.none)
+    box_fvg = box.new(bar_index - 1, low[2], bar_index + 10, high, border_color=color.new(#FF5252, 50), bgcolor=col_fvg_bear, border_style=line.style_dashed, text="-FVG", text_size=size.tiny, text_color=color.white, extend=extend.none)
     array.push(fvgBoxes, FvgBox.new(box_fvg, low[2], high, false, false))
 
 // Mitigación de FVG
