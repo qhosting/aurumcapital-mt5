@@ -26,14 +26,16 @@ c_blue    = color.new(#2979FF, 0)
 
 // ==================== INPUTS: SMART MONEY CONCEPTS (SMC) ====================
 grp_smc = "=== INSTITUTIONAL SMART MONEY CONCEPTS (SMC V15.0) ==="
-inp_use_smc       = input.bool(true, "Activar Motor Institucional SMC", group=grp_smc)
-inp_swing_len     = input.int(5, "Longitud de Swing Pivots (Velas)", minval=2, maxval=20, group=grp_smc)
-inp_show_ob       = input.bool(true, "Mostrar Order Blocks (OB)", group=grp_smc)
-inp_show_breakers = input.bool(true, "Mostrar Breaker Blocks (Inversión Polaridad)", group=grp_smc)
-inp_show_fvg      = input.bool(true, "Mostrar Fair Value Gaps (FVG)", group=grp_smc)
-inp_show_eqhl     = input.bool(true, "Detectar Piscinas de Liquidez (EQH / EQL)", group=grp_smc)
-inp_show_pdz      = input.bool(true, "Mostrar Nivel de Equilibrio (50% Range)", group=grp_smc)
-inp_ob_count      = input.int(3, "Máximo POIs Visibles en Pantalla (2 a 4)", minval=1, maxval=10, group=grp_smc)
+inp_use_smc        = input.bool(true, "Activar Motor Institucional SMC", group=grp_smc)
+inp_swing_len      = input.int(5, "Longitud de Swing Pivots (Velas)", minval=2, maxval=20, group=grp_smc)
+inp_show_bos_choch = input.bool(true, "Dibujar Estructura (BOS / CHoCH Líneas)", group=grp_smc)
+inp_show_ob        = input.bool(true, "Mostrar Order Blocks (OB con texto)", group=grp_smc)
+inp_show_breakers  = input.bool(true, "Mostrar Breaker Blocks (Inversión Polaridad)", group=grp_smc)
+inp_chop_control   = input.bool(true, "Chop Control (Eliminar Breakers Whipsaw)", group=grp_smc, tooltip="Elimina breakers que son atravesados de vuelta múltiples veces")
+inp_show_fvg       = input.bool(true, "Mostrar Fair Value Gaps (FVG con texto)", group=grp_smc)
+inp_show_eqhl      = input.bool(true, "Detectar Piscinas de Liquidez (EQH / EQL)", group=grp_smc)
+inp_show_pdz       = input.bool(true, "Mostrar Nivel de Equilibrio (50% Range)", group=grp_smc)
+inp_ob_count       = input.int(4, "Máximo POIs Visibles en Pantalla (2 a 6)", minval=1, maxval=10, group=grp_smc)
 
 // Colores Institucionales con Transparencia Limpia
 col_bull_ob  = input.color(color.new(#00E5FF, 86), "Color Bullish OB", group=grp_smc)
@@ -42,6 +44,8 @@ col_bull_brk = input.color(color.new(#2979FF, 84), "Color Bullish Breaker", grou
 col_bear_brk = input.color(color.new(#D500F9, 84), "Color Bearish Breaker", group=grp_smc)
 col_fvg_bull = input.color(color.new(#00E676, 88), "Color Bullish FVG", group=grp_smc)
 col_fvg_bear = input.color(color.new(#FF5252, 88), "Color Bearish FVG", group=grp_smc)
+col_bos_bull = input.color(color.new(#00E5FF, 0), "Color Estructura Alcista (BOS/CHoCH)", group=grp_smc)
+col_bos_bear = input.color(color.new(#FF1744, 0), "Color Estructura Bajista (BOS/CHoCH)", group=grp_smc)
 
 // ==================== INPUTS: ESTRATEGIA & FILTROS ====================
 grp_strat = "=== TENDENCIA & FILTROS DE ENTRADA ==="
@@ -171,6 +175,7 @@ type Orderblock
     int   startBar
     bool  isBullish
     bool  isBreaker
+    bool  wasOriginallyBullish
     bool  isMitigated
 
 type FvgBox
@@ -193,35 +198,59 @@ var int   lastSwingHighBar  = na
 var int   lastSwingLowBar   = na
 var bool  swingHighBreached = false
 var bool  swingLowBreached  = false
+var int   smc_bias          = 0 // 1: Alcista, -1: Bajista
 var string market_structure = "CONSOLIDACIÓN"
 
 // Barreras anti-duplicación para Sweeps
 var int   last_eqh_sweep_bar = na
 var int   last_eql_sweep_bar = na
 
+// 1. Piscinas de Liquidez (EQH / EQL - Motor SMC.txt)
 if not na(isSwingHigh)
+    if inp_use_smc and inp_show_eqhl and not na(lastSwingHigh)
+        if math.abs(lastSwingHigh - isSwingHigh) < (atr * 0.18)
+            line.new(lastSwingHighBar, lastSwingHigh, bar_index - inp_swing_len, isSwingHigh, color=col_bos_bear, style=line.style_dotted, width=1)
+            int mid_b = math.round(0.5 * (lastSwingHighBar + bar_index - inp_swing_len))
+            label.new(mid_b, lastSwingHigh, "x2 EQH", color=color.new(c_black, 100), textcolor=col_bos_bear, style=label.style_label_down, size=size.tiny)
     lastSwingHigh     := isSwingHigh
     lastSwingHighBar  := bar_index - inp_swing_len
     swingHighBreached := false
 
 if not na(isSwingLow)
+    if inp_use_smc and inp_show_eqhl and not na(lastSwingLow)
+        if math.abs(lastSwingLow - isSwingLow) < (atr * 0.18)
+            line.new(lastSwingLowBar, lastSwingLow, bar_index - inp_swing_len, isSwingLow, color=col_bos_bull, style=line.style_dotted, width=1)
+            int mid_b = math.round(0.5 * (lastSwingLowBar + bar_index - inp_swing_len))
+            label.new(mid_b, lastSwingLow, "x2 EQL", color=color.new(c_black, 100), textcolor=col_bos_bull, style=label.style_label_up, size=size.tiny)
     lastSwingLow      := isSwingLow
     lastSwingLowBar   := bar_index - inp_swing_len
     swingLowBreached  := false
 
-// Rupturas Estructurales (BOS / CHoCH)
+// 2. Rupturas Estructurales (BOS / CHoCH con líneas y etiquetas de SMC.txt)
 bullishMSB = not na(lastSwingHigh) and not swingHighBreached and close > lastSwingHigh
 bearishMSB = not na(lastSwingLow)  and not swingLowBreached  and close < lastSwingLow
 
 if bullishMSB
     swingHighBreached := true
-    market_structure  := "BULLISH BOS / CHoCH"
+    bool is_choch = (smc_bias == -1)
+    market_structure  := is_choch ? "BULLISH CHoCH" : "BULLISH BOS"
+    smc_bias := 1
+    if inp_use_smc and inp_show_bos_choch
+        line.new(lastSwingHighBar, lastSwingHigh, bar_index, lastSwingHigh, color=col_bos_bull, style=is_choch ? line.style_dashed : line.style_solid, width=1)
+        int mid_x = math.round(0.5 * (lastSwingHighBar + bar_index))
+        label.new(mid_x, lastSwingHigh, is_choch ? "CHoCH" : "BOS", color=color.new(c_black, 100), textcolor=col_bos_bull, style=label.style_label_down, size=size.tiny)
 
 if bearishMSB
     swingLowBreached := true
-    market_structure := "BEARISH BOS / CHoCH"
+    bool is_choch = (smc_bias == 1)
+    market_structure := is_choch ? "BEARISH CHoCH" : "BEARISH BOS"
+    smc_bias := -1
+    if inp_use_smc and inp_show_bos_choch
+        line.new(lastSwingLowBar, lastSwingLow, bar_index, lastSwingLow, color=col_bos_bear, style=is_choch ? line.style_dashed : line.style_solid, width=1)
+        int mid_x = math.round(0.5 * (lastSwingLowBar + bar_index))
+        label.new(mid_x, lastSwingLow, is_choch ? "CHoCH" : "BOS", color=color.new(c_black, 100), textcolor=col_bos_bear, style=label.style_label_up, size=size.tiny)
 
-// 1. Creación de Order Blocks (OBs) - Acotados a la derecha (sin líneas infinitas)
+// 3. Creación de Order Blocks (OB con texto y estilo de SMC.txt & OB.txt)
 if inp_use_smc and inp_show_ob
     if bullishMSB
         for i = 1 to 25
@@ -229,13 +258,18 @@ if inp_use_smc and inp_show_ob
                 newBox = box.new(
                      left         = bar_index - i,
                      top          = high[i],
-                     right        = bar_index + 10,
+                     right        = bar_index + 12,
                      bottom       = low[i],
-                     border_color = color.new(#00E5FF, 40),
+                     border_color = color.new(#00E5FF, 35),
                      bgcolor      = col_bull_ob,
                      border_width = 1,
+                     text         = "+OB",
+                     text_size    = size.tiny,
+                     text_color   = color.white,
+                     text_valign  = text.valign_center,
+                     text_halign  = text.halign_right,
                      extend       = extend.none)
-                array.push(orderblocks, Orderblock.new(newBox, high[i], low[i], bar_index - i, true, false, false))
+                array.push(orderblocks, Orderblock.new(newBox, high[i], low[i], bar_index - i, true, false, true, false))
                 break
 
     if bearishMSB
@@ -244,16 +278,21 @@ if inp_use_smc and inp_show_ob
                 newBox = box.new(
                      left         = bar_index - i,
                      top          = high[i],
-                     right        = bar_index + 10,
+                     right        = bar_index + 12,
                      bottom       = low[i],
-                     border_color = color.new(#FF1744, 40),
+                     border_color = color.new(#FF1744, 35),
                      bgcolor      = col_bear_ob,
                      border_width = 1,
+                     text         = "-OB",
+                     text_size    = size.tiny,
+                     text_color   = color.white,
+                     text_valign  = text.valign_center,
+                     text_halign  = text.halign_right,
                      extend       = extend.none)
-                array.push(orderblocks, Orderblock.new(newBox, high[i], low[i], bar_index - i, false, false, false))
+                array.push(orderblocks, Orderblock.new(newBox, high[i], low[i], bar_index - i, false, false, false, false))
                 break
 
-// 2. Breakers y Mitigación Dinámica
+// 4. Breakers, Inversión de Polaridad y Chop Control (Motor OB.txt)
 if inp_use_smc and array.size(orderblocks) > 0
     for i = array.size(orderblocks) - 1 to 0
         ob = array.get(orderblocks, i)
@@ -265,7 +304,9 @@ if inp_use_smc and array.size(orderblocks) > 0
                     ob.isBullish := false
                     box.set_bgcolor(ob.boxObj, col_bear_brk)
                     box.set_border_color(ob.boxObj, color.new(#D500F9, 30))
-                    box.set_right(ob.boxObj, bar_index + 10)
+                    box.set_text(ob.boxObj, "-BRK")
+                    box.set_text_color(ob.boxObj, color.white)
+                    box.set_right(ob.boxObj, bar_index + 12)
                     array.set(orderblocks, i, ob)
                 else
                     ob.isMitigated := true
@@ -277,31 +318,44 @@ if inp_use_smc and array.size(orderblocks) > 0
                     ob.isBullish := true
                     box.set_bgcolor(ob.boxObj, col_bull_brk)
                     box.set_border_color(ob.boxObj, color.new(#2979FF, 30))
-                    box.set_right(ob.boxObj, bar_index + 10)
+                    box.set_text(ob.boxObj, "+BRK")
+                    box.set_text_color(ob.boxObj, color.white)
+                    box.set_right(ob.boxObj, bar_index + 12)
                     array.set(orderblocks, i, ob)
                 else
                     ob.isMitigated := true
                     box.set_right(ob.boxObj, bar_index)
                     array.set(orderblocks, i, ob)
+            else if inp_chop_control and ob.isBreaker
+                // Chop Control de OB.txt: eliminar breakers si el precio vuelve a atravesar en falso
+                bool shouldRemove = false
+                if ob.wasOriginallyBullish and close > ob.top
+                    shouldRemove := true
+                else if not ob.wasOriginallyBullish and close < ob.bottom
+                    shouldRemove := true
+                if shouldRemove
+                    box.delete(ob.boxObj)
+                    array.remove(orderblocks, i)
+                    continue
             else
                 // Extender suavemente la caja mientras sigue viva
-                box.set_right(ob.boxObj, bar_index + 8)
+                box.set_right(ob.boxObj, bar_index + 10)
 
 // Limitar cantidad de OBs en pantalla a solo los más recientes y relevantes
 while array.size(orderblocks) > inp_ob_count
     old_ob = array.shift(orderblocks)
     box.delete(old_ob.boxObj)
 
-// 3. Fair Value Gaps (FVG) Limpios (Se borran o cortan al mitigarse)
+// 5. Fair Value Gaps (FVG) Limpios con Etiquetas (Motor SMC.txt)
 bool is_bull_fvg = (low > high[2]) and inp_use_smc and inp_show_fvg
 bool is_bear_fvg = (high < low[2]) and inp_use_smc and inp_show_fvg
 
 if is_bull_fvg
-    box_fvg = box.new(bar_index - 1, low, bar_index + 10, high[2], border_color=color.new(#00E676, 50), bgcolor=col_fvg_bull, border_style=line.style_dashed, extend=extend.none)
+    box_fvg = box.new(bar_index - 1, low, bar_index + 10, high[2], border_color=color.new(#00E676, 50), bgcolor=col_fvg_bull, border_style=line.style_dashed, text="+FVG", text_size=size.tiny, text_color=color.white, text_valign=text.valign_center, text_halign=text.halign_right, extend=extend.none)
     array.push(fvgBoxes, FvgBox.new(box_fvg, low, high[2], true, false))
 
 if is_bear_fvg
-    box_fvg = box.new(bar_index - 1, low[2], bar_index + 10, high, border_color=color.new(#FF5252, 50), bgcolor=col_fvg_bear, border_style=line.style_dashed, extend=extend.none)
+    box_fvg = box.new(bar_index - 1, low[2], bar_index + 10, high, border_color=color.new(#FF5252, 50), bgcolor=col_fvg_bear, border_style=line.style_dashed, text="-FVG", text_size=size.tiny, text_color=color.white, text_valign=text.valign_center, text_halign=text.halign_right, extend=extend.none)
     array.push(fvgBoxes, FvgBox.new(box_fvg, low[2], high, false, false))
 
 // Mitigación de FVG
@@ -325,7 +379,7 @@ while array.size(fvgBoxes) > 3
     old_fvg = array.shift(fvgBoxes)
     box.delete(old_fvg.boxObj)
 
-// 4. Piscinas de Liquidez y Cazas de Stops (EQH / EQL Sweeps) - SIN REPETICIÓN
+// 6. Piscinas de Liquidez y Cazas de Stops (EQH / EQL Sweeps) - SIN REPETICIÓN
 bool eqh_sweep = false
 bool eql_sweep = false
 
@@ -341,7 +395,7 @@ if inp_use_smc and inp_show_eqhl and not na(lastSwingHigh) and not na(lastSwingL
 plotshape(eql_sweep, "Barrido EQL (Liquidity Sweep)", shape.labelup, location.belowbar, c_lime, text="SWEEP", textcolor=c_black, size=size.tiny)
 plotshape(eqh_sweep, "Barrido EQH (Liquidity Sweep)", shape.labeldown, location.abovebar, c_red, text="SWEEP", textcolor=c_white, size=size.tiny)
 
-// 5. Rango Premium / Descuento (50% Range)
+// 7. Rango Premium / Descuento (50% Range)
 h1_high_range = ta.highest(high, 40)
 h1_low_range  = ta.lowest(low, 40)
 eq_level      = (h1_high_range + h1_low_range) * 0.5
