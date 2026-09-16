@@ -32,6 +32,9 @@
 #property strict
 
 #include <Trade\Trade.mqh>
+#include "Include\AurumStationBridge.mqh"
+
+CAurumStationBridge g_station_bridge;
 
 // ==================== INPUTS ====================
 input group "=== GESTIÓN DE RIESGO INSTITUCIONAL & PROTECCIÓN DIARIA (V15) ==="
@@ -1071,6 +1074,7 @@ bool ValidateEnvironmentV15(string &fail_reason) {
 
 int OnInit() {
    trade.SetExpertMagicNumber(MAGIC_NUMBER);
+   g_station_bridge.Init(InpStationSyncEnabled, InpStationWebhookUrl, InpStationApiKey);
    AutoTuneAssets();
    g_start_equity = AccountInfoDouble(ACCOUNT_EQUITY);
    g_last_reset_day = iTime(_Symbol, PERIOD_D1, 0);
@@ -1187,7 +1191,11 @@ void OnTradeTransaction(const MqlTradeTransaction& trans,
              double deal_vol   = HistoryDealGetDouble(trans.deal, DEAL_VOLUME);
              string deal_sym   = HistoryDealGetString(trans.deal, DEAL_SYMBOL);
              string result_tag = (g_last_trade_profit >= 0) ? "GANANCIA" : "PERDIDA";
-             Print("[CIERRE ",result_tag,"] ",deal_sym," Vol:",DoubleToString(deal_vol,2),
+             double deal_comm = HistoryDealGetDouble(trans.deal, DEAL_COMMISSION);
+              double deal_swap = HistoryDealGetDouble(trans.deal, DEAL_SWAP);
+              ulong deal_order = (ulong)HistoryDealGetInteger(trans.deal, DEAL_ORDER);
+              g_station_bridge.SendOrderClose(deal_order, InpMagicNumber, deal_sym, (g_last_trade_profit >= 0 ? "WIN" : "LOSS"), deal_price, g_last_trade_profit, deal_comm, deal_swap, deal_vol, "V15 Exit", result_tag);
+              Print("[CIERRE ",result_tag,"] ",deal_sym," Vol:",DoubleToString(deal_vol,2),
                    " @ ",DoubleToString(deal_price,_Digits),
                    " P&L: $",DoubleToString(g_last_trade_profit,2),
                    " Losses seguidos: ",g_consecutive_losses);
@@ -1754,6 +1762,8 @@ void OnTick() {
          int usd_dir_buy = GetUSDDirection(_Symbol, "BUY");
          if(usd_dir_buy != 0) GlobalVariableSet("AURUM_USD_DISPATCH_TIME", (double)TimeCurrent());
          if(trade.Buy(trade_lot, _Symbol, ask, sl, tp, "Aurum V15 Sniper")) {
+            ulong t_ticket = trade.ResultOrder();
+            g_station_bridge.SendOrderOpen(t_ticket, InpMagicNumber, _Symbol, "BUY", ask, sl, tp, trade_lot, actual_risk_pct, "Aurum V15 Sniper");
             g_daily_trades++;
             PrintFormat("[COMPRA%s] Lote:%.2f SL:%.2f TP:%.2f | Riesgo: -$%.2f (%.1f%%) | SL_dist:$%.2f (%.0f pts) | ATR:%.2f | R:R 1:%.1f%s%s",
                         (trend_bull ? "" : " RANGO"), trade_lot, sl, tp, actual_risk_usd, actual_risk_pct, sl_dist, sl_dist/_Point, atr, g_risk_reward,
