@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Manual Operativo Aurum Vision V15 & MT5 Sniper</title>
+    <title>Manual Operativo Aurum Vision V15.20 & MT5 Sniper</title>
     <style>
         :root {
             --gold: #FFD700;
@@ -12,6 +12,7 @@
             --red: #FF1744;
             --purple: #B388FF;
             --blue: #2979FF;
+            --orange: #FF9100;
             --dark-bg: #0B0E14;
             --card-bg: #151A23;
             --card-border: #232A38;
@@ -29,7 +30,7 @@
         }
 
         .container {
-            max-width: 960px;
+            max-width: 980px;
             margin: 0 auto;
         }
 
@@ -44,7 +45,7 @@
             background: linear-gradient(135deg, rgba(255, 215, 0, 0.2), rgba(0, 229, 255, 0.2));
             color: var(--gold);
             border: 1px solid var(--gold);
-            padding: 6px 14px;
+            padding: 6px 16px;
             border-radius: 20px;
             font-size: 0.85em;
             font-weight: 700;
@@ -120,6 +121,8 @@
         .tag-brk-bull { color: var(--blue); background: rgba(41, 121, 255, 0.1); padding: 3px 8px; border-radius: 6px; border: 1px solid var(--blue); }
         .tag-brk-bear { color: var(--purple); background: rgba(179, 136, 255, 0.1); padding: 3px 8px; border-radius: 6px; border: 1px solid var(--purple); }
         .tag-sweep { color: var(--lime); background: rgba(0, 230, 118, 0.1); padding: 3px 8px; border-radius: 6px; border: 1px solid var(--lime); }
+        .tag-euro { color: var(--blue); background: rgba(41, 121, 255, 0.15); padding: 3px 8px; border-radius: 6px; border: 1px solid var(--blue); }
+        .tag-london { color: var(--red); background: rgba(255, 23, 68, 0.15); padding: 3px 8px; border-radius: 6px; border: 1px solid var(--red); }
 
         table {
             width: 100%;
@@ -149,10 +152,12 @@
 
         .step-box {
             background: var(--card-bg);
-            border-left: 4px solid var(--gold);
+            border-left: 4px solid var(--lime);
             padding: 18px 22px;
-            margin: 15px 0;
+            margin: 20px 0;
             border-radius: 0 10px 10px 0;
+            border: 1px solid var(--card-border);
+            border-left-width: 4px;
         }
 
         .step-box.sell {
@@ -160,43 +165,58 @@
         }
 
         .step-box h4 {
-            margin: 0 0 8px 0;
-            color: var(--gold);
-            font-size: 1.1em;
+            margin: 0 0 12px 0;
+            font-size: 1.15em;
         }
 
-        .step-box.sell h4 {
-            color: var(--red);
+        .checklist-item {
+            margin-bottom: 8px;
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
         }
 
         .visual-levels {
             background: #0D1117;
-            border: 1px dashed var(--card-border);
+            border: 1px solid var(--card-border);
             border-radius: 10px;
             padding: 20px;
-            font-family: 'Courier New', Courier, monospace;
-            margin: 20px 0;
+            margin: 25px 0;
+            font-family: 'Consolas', 'Courier New', monospace;
         }
 
         .level-row {
-            padding: 6px 12px;
-            margin: 4px 0;
-            border-radius: 4px;
             display: flex;
             justify-content: space-between;
-            font-weight: bold;
+            padding: 8px 12px;
+            margin: 4px 0;
+            border-radius: 6px;
+            font-weight: 600;
         }
 
-        .tp2 { background: rgba(0, 229, 255, 0.15); color: var(--cyan); }
-        .tp1 { background: rgba(255, 215, 0, 0.15); color: var(--gold); }
-        .ml  { background: rgba(255, 145, 0, 0.2); color: #FF9100; }
-        .en  { background: rgba(255, 255, 255, 0.08); color: #FFF; }
-        .sl  { background: rgba(255, 23, 68, 0.15); color: var(--red); }
+        .level-row.tp2 { background: rgba(0, 229, 255, 0.15); color: var(--cyan); border-left: 4px solid var(--cyan); }
+        .level-row.tp1 { background: rgba(255, 215, 0, 0.15); color: var(--gold); border-left: 4px solid var(--gold); }
+        .level-row.ml  { background: rgba(255, 145, 0, 0.15); color: var(--orange); border-left: 4px solid var(--orange); }
+        .level-row.en  { background: rgba(255, 255, 255, 0.08); color: #FFF; border-left: 4px solid #FFF; }
+        .level-row.sl  { background: rgba(255, 23, 68, 0.15); color: var(--red); border-left: 4px solid var(--red); }
+
+        .callout {
+            background: rgba(255, 215, 0, 0.08);
+            border-left: 4px solid var(--gold);
+            padding: 15px 20px;
+            border-radius: 0 8px 8px 0;
+            margin: 20px 0;
+        }
+
+        .callout.danger {
+            background: rgba(255, 23, 68, 0.08);
+            border-left-color: var(--red);
+        }
 
         footer {
-            margin-top: 50px;
-            padding-top: 20px;
+            margin-top: 60px;
             border-top: 1px solid var(--card-border);
+            padding-top: 25px;
             text-align: center;
             color: var(--text-dim);
             font-size: 0.9em;
@@ -207,145 +227,139 @@
 
 <div class="container">
     <header>
-        <span class="badge-v15">AURUM CAPITAL V15.0 INSTITUTIONAL</span>
-        <h1>Manual Táctico <span>Aurum Vision & Sniper MT5</span></h1>
-        <p class="subtitle">Guía integral de lectura de indicadores en TradingView, protocolo de entradas sniper y gestión de salidas escalonadas</p>
+        <div class="badge-v15">V15.20 INSTITUTIONAL PRO EDITION</div>
+        <h1>🦅 Manual Táctico <span>Aurum Vision</span> & Sniper MT5</h1>
+        <p class="subtitle">Guía visual de lectura del gráfico, horarios TimeZone, filtros Anti-CHoCH y protocolo de entradas de alta probabilidad</p>
     </header>
 
-    <h2>🧭 1. Resumen y Filosofía Operativa</h2>
-    <p>
-        El ecosistema <strong>Aurum V15</strong> combina la precisión visual de <em>Smart Money Concepts (SMC)</em> en TradingView con la ejecución algorítmica estricta de <em>AurumSniper.mq5</em> en MetaTrader 5.
-        No operamos soporte y resistencia minoristas; nos posicionamos en las huellas de liquidez institucional con estricto control de riesgo: <strong>Micro-Lock a +0.5R, Break-Even inmediato, Killzones horarias y un máximo de 3 operaciones diarias</strong>.
-    </p>
+    <h2>🧭 1. Cómo Leer el Gráfico en 3 Pasos Visuales</h2>
+    <p>Al abrir tu gráfico en <strong>M15</strong> con <code>AurumVision.pine</code> o <code>TimeZone.pine</code>, realiza esta lectura ordenada:</p>
 
-    <h2>🎨 2. Indicadores y Elementos Visuales en el Gráfico M15</h2>
     <div class="card-grid">
         <div class="card">
-            <div class="card-title"><span class="tag-ob-bull">+OB</span> Bullish Order Block</div>
-            <p>Última vela bajista institucional antes del impulso que rompió máximos. Actúa como <strong>suelo o soporte de alta probabilidad para compras</strong>.</p>
+            <div class="card-title">1. Color de Fondo (Sesiones)</div>
+            <p>
+                <span class="tag-euro">Azul Suave</span> = <strong>Sesión EURO</strong> (12:00 a 20:00 UTC / 06:00 a 14:00 CDMX).<br/>
+                <span class="tag-london">Rojo Suave</span> = <strong>Sesión London</strong> (12:30 a 18:30 UTC / 06:30 a 12:30 CDMX).<br/>
+                <strong>Fondo Neutro / Oscuro</strong> = Fuera de sesión (Asia/Noche). <em>Prohibido abrir trades</em>.
+            </p>
         </div>
+
         <div class="card">
-            <div class="card-title"><span class="tag-ob-bear">-OB</span> Bearish Order Block</div>
-            <p>Última vela alcista institucional previa a la caída que rompió mínimos. Actúa como <strong>techo o resistencia de alta probabilidad para ventas</strong>.</p>
+            <div class="card-title">2. Dashboard HUD (Top Right)</div>
+            <p>
+                <strong>Estructura SMC:</strong> Indica si el mercado está <code>BULLISH [Solo BUY]</code> o <code>BEARISH [Solo SELL]</code>.<br/>
+                <strong>Rango Institucional:</strong> Confirma si cotizamos en <code>DESCUENTO</code> (&lt; 50%) o <code>PREMIUM</code> (&gt; 50%).<br/>
+                <strong>Confluencia:</strong> Informa si testeamos un <code>+OB</code>, <code>+BRK</code>, etc.
+            </p>
         </div>
+
         <div class="card">
-            <div class="card-title"><span class="tag-brk-bull">+BRK</span> Bullish Breaker</div>
-            <p>Un Bearish OB roto al alza se invierte y se convierte en un nuevo soporte institucional. Esperamos el retesteo por encima para comprar.</p>
-        </div>
-        <div class="card">
-            <div class="card-title"><span class="tag-brk-bear">-BRK</span> Bearish Breaker</div>
-            <p>Un Bullish OB roto a la baja se invierte y se convierte en resistencia institucional. Esperamos el retroceso alcista para vender.</p>
-        </div>
-        <div class="card">
-            <div class="card-title"><span>⎯⎯⎯</span> BOS vs CHoCH</div>
-            <p><strong>BOS (Línea Continua):</strong> Continuación de tendencia.<br><strong>CHoCH (Línea Punteada):</strong> Primer cambio de carácter y giro potencial de tendencia.</p>
-        </div>
-        <div class="card">
-            <div class="card-title"><span class="tag-sweep">🪤 SWEEP</span> Caza de Liquidez</div>
-            <p>Aparece cuando el precio perfora falsamente un doble techo (<code>x2 EQH</code>) o doble suelo (<code>x2 EQL</code>) y rechaza con mecha. Disparo inmediato en contratendencia.</p>
+            <div class="card-title">3. Cajas y Niveles en Pantalla</div>
+            <p>
+                <span class="tag-ob-bull">+OB (Cian)</span> : Bloque de compras.<br/>
+                <span class="tag-brk-bull">+BRK (Azul)</span> : Soporte invertido institucional.<br/>
+                <span class="tag-ob-bear">-OB (Rojo)</span> : Bloque de ventas.<br/>
+                <span class="tag-brk-bear">-BRK (Púrpura)</span> : Resistencia invertida.<br/>
+                <span class="tag-sweep">SWEEP</span> : Caza de liquidez bancaria.
+            </p>
         </div>
     </div>
 
-    <h3>Horarios Oficiales & Killzones (UTC y CDMX)</h3>
-    <table>
-        <thead>
-            <tr>
-                <th>Killzone</th>
-                <th>Horario UTC</th>
-                <th>Horario CDMX</th>
-                <th>Fondo en Gráfico</th>
-                <th>Acción Operativa</th>
-            </tr>
-        </thead>
-        <tbody>
-            <tr>
-                <td><strong>🇬🇧 Londres Killzone</strong></td>
-                <td>07:00 – 12:00</td>
-                <td>01:00 – 06:00</td>
-                <td>Púrpura suave</td>
-                <td>Rompimientos iniciales y creación del rango diario.</td>
-            </tr>
-            <tr>
-                <td><strong>🔥 Golden Overlap</strong></td>
-                <td>12:00 – 16:00</td>
-                <td>06:00 – 10:00</td>
-                <td>Dorado brillante</td>
-                <td><strong>Mejor horario</strong>: confluencia Londres + NY. Máximo volumen.</td>
-            </tr>
-            <tr>
-                <td><strong>🇺🇸 Nueva York Killzone</strong></td>
-                <td>12:00 – 21:00</td>
-                <td>06:00 – 15:00</td>
-                <td>Cian suave</td>
-                <td>Impulsos tras aperturas y noticias de EE.UU.</td>
-            </tr>
-            <tr>
-                <td><strong>🛑 Asia / Rollover</strong></td>
-                <td>21:00 – 07:00</td>
-                <td>15:00 – 01:00</td>
-                <td>Rojo tenue</td>
-                <td><strong>ZONA PROHIBIDA</strong>: Spreads inflados, swaps y baja liquidez.</td>
-            </tr>
-        </tbody>
-    </table>
+    <div class="callout danger">
+        <strong>⚠️ La Regla de Oro Institucional (Anti-CHoCH):</strong>
+        <br/>• Si el Dashboard marca <strong>BULLISH CHoCH [Solo BUY]</strong>, queda <strong>terminantemente prohibido vender</strong>, sin importar si el precio está en zona Premium o toca un bloque bajista.
+        <br/>• Si el Dashboard marca <strong>BEARISH CHoCH [Solo SELL]</strong>, queda <strong>terminantemente prohibido comprar</strong>.
+    </div>
 
-    <h2>🎯 3. Protocolo de Búsqueda de ENTRADAS (Checklist Sniper)</h2>
+    <h2>🎯 2. ¿Qué Debo Buscar Exactamente Para Entrar?</h2>
 
     <div class="step-box">
         <h4>🟢 Checklist Obligatorio para COMPRAS (BUY)</h4>
-        <ol>
-            <li><strong>Killzone Activa:</strong> Fondo de pantalla dentro de Londres, NY o Golden Overlap.</li>
-            <li><strong>Tendencia Macro:</strong> Precio por encima de la EMA 200 H1 (línea verde) y filtro MTF H4 alcista.</li>
-            <li><strong>Rango Institucional:</strong> Precio por debajo del 50% de equilibrio (<strong>Zona de Descuento</strong>).</li>
-            <li><strong>Zona SMC:</strong> Precio rebotando en <code>+OB</code> (cian), <code>+BRK</code> (azul) o tras un <code>SWEEP EQL</code>.</li>
-            <li><strong>Oscilador Agotado:</strong> RSI &lt; 42 (o 40 en Oro) y ADX &gt; 15-20 (volatilidad confirmada).</li>
-            <li><strong>Acción del Precio:</strong> Vela de 15 min cerrada verde alcista o con mecha inferior &ge; 30% (rechazo de vendedores).</li>
-        </ol>
-        <strong>Disparo:</strong> Aparece triángulo verde <code>BUY SNIPER V15</code>.
+        <div class="checklist-item">✅ <strong>1. Horario:</strong> Fondo sombreado en Azul (EURO) o Rojo (London), o Killzone activa en HUD.</div>
+        <div class="checklist-item">✅ <strong>2. Tendencia Macro:</strong> Precio por encima de la EMA 200 H1 (línea verde) y MTF H4 alcista.</div>
+        <div class="checklist-item">✅ <strong>3. Estructura SMC:</strong> HUD marca <code>BULLISH CHoCH [Solo BUY]</code> o <code>BULLISH BOS [Solo BUY]</code>.</div>
+        <div class="checklist-item">✅ <strong>4. Rango:</strong> Precio cotizando en la mitad inferior (<strong>Zona de Descuento &lt; 50%</strong>).</div>
+        <div class="checklist-item">✅ <strong>5. Confluencia:</strong> Precio rebotando en <code>+OB</code> (cian), <code>+BRK</code> (azul) o tras un <code>SWEEP EQL</code> (caza de mínimos).</div>
+        <div class="checklist-item">✅ <strong>6. Sin Conflicto:</strong> El precio NO debe estar chocando de frente contra un <code>-BRK</code> o <code>-OB</code> bajista activo.</div>
+        <div class="checklist-item">✅ <strong>7. Gatillo PA:</strong> Vela cerrada M15 verde o con mecha inferior &ge; 30% del tamaño total; RSI &lt; 42 y ADX &gt; 15.</div>
+        <br/>
+        <strong>➔ Gatillo en Gráfico:</strong> Triángulo verde <code>BUY SNIPER V15</code>.
     </div>
 
     <div class="step-box sell">
         <h4>🔴 Checklist Obligatorio para VENTAS (SELL)</h4>
-        <ol>
-            <li><strong>Killzone Activa:</strong> Fondo de pantalla dentro de Londres, NY o Golden Overlap.</li>
-            <li><strong>Tendencia Macro:</strong> Precio por debajo de la EMA 200 H1 (línea roja) y filtro MTF H4 bajista.</li>
-            <li><strong>Rango Institucional:</strong> Precio por encima del 50% de equilibrio (<strong>Zona Premium</strong>).</li>
-            <li><strong>Zona SMC:</strong> Precio rechazando <code>-OB</code> (rojo), <code>-BRK</code> (púrpura) o tras un <code>SWEEP EQH</code>.</li>
-            <li><strong>Oscilador Agotado:</strong> RSI &gt; 58-60 y ADX &gt; 15-20.</li>
-            <li><strong>Acción del Precio:</strong> Vela cerrada roja bajista o con mecha superior &ge; 30% (rechazo de compradores).</li>
-        </ol>
-        <strong>Disparo:</strong> Aparece triángulo rojo <code>SELL SNIPER V15</code>.
+        <div class="checklist-item">✅ <strong>1. Horario:</strong> Fondo sombreado en Azul (EURO) o Rojo (London), o Killzone activa en HUD.</div>
+        <div class="checklist-item">✅ <strong>2. Tendencia Macro:</strong> Precio por debajo de la EMA 200 H1 (línea roja) y MTF H4 bajista.</div>
+        <div class="checklist-item">✅ <strong>3. Estructura SMC:</strong> HUD marca <code>BEARISH CHoCH [Solo SELL]</code> o <code>BEARISH BOS [Solo SELL]</code>.</div>
+        <div class="checklist-item">✅ <strong>4. Rango:</strong> Precio cotizando en la mitad superior (<strong>Zona Premium &gt; 50%</strong>).</div>
+        <div class="checklist-item">✅ <strong>5. Confluencia:</strong> Precio rechazando <code>-OB</code> (rojo), <code>-BRK</code> (púrpura) o tras un <code>SWEEP EQH</code> (caza de techos).</div>
+        <div class="checklist-item">✅ <strong>6. Sin Conflicto:</strong> El precio NO debe estar rebotando sobre un <code>+BRK</code> o <code>+OB</code> alcista activo.</div>
+        <div class="checklist-item">✅ <strong>7. Gatillo PA:</strong> Vela cerrada M15 roja o con mecha superior &ge; 30% del tamaño total; RSI &gt; 58-60 y ADX &gt; 15.</div>
+        <br/>
+        <strong>➔ Gatillo en Gráfico:</strong> Triángulo rojo <code>SELL SNIPER V15</code>.
     </div>
 
-    <h2>🛡️ 4. Protocolo de Gestión de SALIDAS (Riesgo y Escalonamiento)</h2>
-    <p>Cada vez que se dispara una entrada, el gráfico dibuja automáticamente los 5 niveles exactos de precio:</p>
+    <h2>🛡️ 3. Protocolo de Salidas y Blindaje de Capital</h2>
+    <p>Al activarse un disparo Sniper, el gráfico proyecta 5 líneas exactas de gestión matemática:</p>
 
     <div class="visual-levels">
-        <div class="level-row tp2"><span>TP2 (Target Principal)</span><span>+1.8R (40% de Cierre)</span></div>
-        <div class="level-row tp1"><span>TP1 (Consolidación)</span><span>+1.0R (50% de Cierre Restante)</span></div>
-        <div class="level-row ml"><span>MICRO-LOCK (Blindaje de Capital)</span><span>+0.5R ➔ SL a Break-Even & 50% Parcial</span></div>
-        <div class="level-row en"><span>PRECIO DE ENTRADA</span><span>0.0R</span></div>
-        <div class="level-row sl"><span>STOP LOSS INICIAL</span><span>-1.0R (2.0x ATR / Oro $10 a $18 USD Cap)</span></div>
+        <div class="level-row tp2"><span>TP2 (Target Principal)</span><span>+1.8R ➔ Cierre del 40% restante (expansión de sesión)</span></div>
+        <div class="level-row tp1"><span>TP1 (Consolidación)</span><span>+1.0R ➔ Cierre del 50% si no operó Micro-Lock</span></div>
+        <div class="level-row ml"><span>MICRO-LOCK (Blindaje de Capital)</span><span>+0.5R ➔ 50% Parcial a Caja y SL a Break-Even</span></div>
+        <div class="level-row en"><span>PRECIO DE ENTRADA</span><span>0.0R (Línea Blanca Punteada)</span></div>
+        <div class="level-row sl"><span>STOP LOSS TÉCNICO</span><span>-1.0R (2.0x ATR con Piso de Seguridad M15)</span></div>
     </div>
 
-    <h3>Regla de Blindaje Micro-Lock (+0.5R):</h3>
-    <p>
-        Al recorrer la mitad de camino hacia el primer objetivo (+0.5R), el sistema <strong>mueve inmediatamente el Stop Loss a Break-Even</strong> y liquida el 50% del lote en ganancia. La operación queda garantizada <strong>al 100% libre de riesgo</strong>.
-    </p>
+    <div class="callout">
+        <strong>Pisos de Stop Loss en V15.20:</strong>
+        <br/>• <strong>Oro (XAUUSD):</strong> Mínimo $10.0 USD, Techo máximo $18.0 USD.
+        <br/>• <strong>EURUSD:</strong> Mínimo 14.0 pips en M15.
+        <br/>• <strong>GBPUSD:</strong> Mínimo 16.0 pips en M15.
+        <br/>• <strong>USDJPY:</strong> Mínimo 15.0 pips en M15.
+        <br/><em>El bot ajusta el lote para que tu riesgo sea exactamente el 0.5% o 1.0%, pero dándole holgura a la operación para evitar que el ruido nocturno de 7 pips toque el SL.</em>
+    </div>
 
-    <h2>⚡ 5. Sincronización con MetaTrader 5</h2>
-    <p>
-        TradingView es el radar visual; MT5 es la pistola ejecutora. Si ves una señal en TradingView pero MT5 no entró, se debe a los filtros de protección institucional integrados:
-    </p>
-    <ul>
-        <li><strong>Filtro de Spread Spike:</strong> Si el broker ensancha el spread temporalmente, MT5 protege el capital y descarta la entrada.</li>
-        <li><strong>Killswitch Diario:</strong> Si la cuenta ya alcanzó -$150 USD de pérdida (en cuenta estándar) o -$20 USD (en micro), el EA bloquea nuevas órdenes hasta el día siguiente.</li>
-        <li><strong>Disyuntor de 3 Pérdidas Consecutivas:</strong> Aplica 2 horas de enfriamiento para evitar sobreoperar mercados en choppiness.</li>
-        <li><strong>Filtro de Noticias:</strong> Bloquea compras/ventas 30 min antes y después de noticias de alto impacto.</li>
-    </ul>
+    <h2>⚡ 4. Sincronización con MetaTrader 5 (AurumSniper V15.20)</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Característica</th>
+                <th>En TradingView (AurumVision.pine)</th>
+                <th>En MetaTrader 5 (AurumSniper.mq5)</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><strong>Filtro Anti-CHoCH</strong></td>
+                <td><code>inp_strict_smc_align = true</code></td>
+                <td><code>InpStrictSMCAlign = true</code></td>
+            </tr>
+            <tr>
+                <td><strong>Protección POI Opuesto</strong></td>
+                <td><code>inp_block_opposing_poi = true</code></td>
+                <td><code>InpBlockOpposingPOI = true</code></td>
+            </tr>
+            <tr>
+                <td><strong>Horario Killzone</strong></td>
+                <td>Sombreado TimeZone / Killzone</td>
+                <td><code>InpUseHighLiquiditySession = true</code> (01:15 a 12:00 CDMX)</td>
+            </tr>
+            <tr>
+                <td><strong>Anti-Race Condition USD</strong></td>
+                <td>Control visual del operador</td>
+                <td><code>AURUM_USD_DISPATCH_TIME</code> (Mutex global de terminal)</td>
+            </tr>
+            <tr>
+                <td><strong>Micro-Lock</strong></td>
+                <td>Proyección visual línea naranja (+0.5R)</td>
+                <td>Parcial automático 50% y movimiento de SL a BE</td>
+            </tr>
+        </tbody>
+    </table>
 
     <footer>
-        <p>Aurum Capital Institutional Engine V15.0 &copy; 2026. Documento reservado para trading algorítmico y cuantitativo.</p>
+        <p>Aurum Capital Institutional Engine V15.20 &copy; 2026. Documento táctico de estrategia algorítmica y cuantitativa.</p>
     </footer>
 </div>
 

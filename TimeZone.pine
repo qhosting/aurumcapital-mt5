@@ -1,0 +1,22 @@
+//@version=5
+indicator("TimeZone [EURO & London]", overlay=true)
+
+// ==============================================================================
+// 🕒 TIMEZONE SESSIONS (EURO & LONDON)
+// ==============================================================================
+
+grp_tz = "=== CONFIGURACIÓN DE SESIONES ==="
+inp_euro = input.session("1200-2000", "Horario Sesión EURO", group=grp_tz)
+inp_ln   = input.session("1230-1830", "Horario Sesión London", group=grp_tz)
+
+col_euro = input.color(color.new(#2979FF, 88), "Color Sesión EURO", group=grp_tz)
+col_ln   = input.color(color.new(#FF1744, 88), "Color Sesión London", group=grp_tz)
+
+t1 = time(timeframe.period, inp_euro)
+t2 = time(timeframe.period, inp_ln)
+
+EURO = na(t1) ? na : col_euro
+LN   = na(t2) ? na : col_ln
+
+bgcolor(EURO, title="EURO")
+bgcolor(LN,   title="London")

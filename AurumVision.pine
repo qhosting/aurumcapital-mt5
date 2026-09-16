@@ -77,6 +77,11 @@ inp_max_atr_gold= input.float(15.0, "Filtro Anti-Noticias: ATR Máximo en Oro ($
 grp_sess = "=== HORARIOS & KILLZONES INSTITUCIONALES ==="
 inp_show_sessions = input.bool(false, "Sombreado Fondo Completo (Desactivado para Gráfico Limpio)", group=grp_sess)
 inp_show_hud      = input.bool(true, "Mostrar Dashboard HUD Institucional", group=grp_sess)
+inp_show_tz_bg    = input.bool(true, "Mostrar Sombreado TimeZone (EURO / London)", group=grp_sess)
+inp_euro_sess     = input.session("1200-2000", "Horario Sesión EURO", group=grp_sess)
+inp_ln_sess       = input.session("1230-1830", "Horario Sesión London", group=grp_sess)
+col_euro_bg       = input.color(color.new(#2979FF, 90), "Color Sesión EURO", group=grp_sess)
+col_ln_bg         = input.color(color.new(#FF1744, 90), "Color Sesión London", group=grp_sess)
 
 // ==================== AUTO-AJUSTE DINÁMICO POR ACTIVO ====================
 int rsi_ob         = inp_rsi_ob
@@ -152,6 +157,16 @@ if inp_show_sessions
         session_bg_color := color.new(#7C4DFF, 96)
 
 bgcolor(session_bg_color, title="Sombreado de Killzone (Opcional)")
+
+// --- TimeZone Sessions (EURO & London) ---
+t_euro = time(timeframe.period, inp_euro_sess)
+t_ln   = time(timeframe.period, inp_ln_sess)
+
+color c_euro_bg = (inp_show_tz_bg and not na(t_euro)) ? col_euro_bg : na
+color c_ln_bg   = (inp_show_tz_bg and not na(t_ln))   ? col_ln_bg   : na
+
+bgcolor(c_euro_bg, title="EURO Session (TimeZone)")
+bgcolor(c_ln_bg,   title="London Session (TimeZone)")
 
 // ==================== INDICADORES BASE ====================
 [h1_ema]              = request.security(syminfo.tickerid, "60", [ta.ema(close[1], inp_ma_per)], lookahead=barmerge.lookahead_off)
