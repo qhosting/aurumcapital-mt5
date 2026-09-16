@@ -36,6 +36,8 @@ inp_show_fvg       = input.bool(true, "Mostrar Fair Value Gaps (FVG con texto)",
 inp_show_eqhl      = input.bool(true, "Detectar Piscinas de Liquidez (EQH / EQL)", group=grp_smc)
 inp_show_pdz       = input.bool(true, "Mostrar Nivel de Equilibrio (50% Range)", group=grp_smc)
 inp_ob_count       = input.int(4, "Máximo POIs Visibles en Pantalla (2 a 6)", minval=1, maxval=10, group=grp_smc)
+inp_strict_smc_align   = input.bool(true, "Alinear con Estructura SMC (Anti-CHoCH Contrario)", group=grp_smc, tooltip="Bloquea ventas si la estructura local está en Bullish CHoCH/BOS, y bloquea compras si está en Bearish CHoCH/BOS")
+inp_block_opposing_poi = input.bool(true, "Bloquear Disparo ante POI Opuesto Activo", group=grp_smc, tooltip="Bloquea ventas si el precio testea un Bullish OB o Breaker, y bloquea compras si testea un Bearish OB o Breaker")
 
 // Colores Institucionales con Transparencia Limpia
 col_bull_ob  = input.color(color.new(#00E5FF, 86), "Color Bullish OB", group=grp_smc)
@@ -425,6 +427,12 @@ if array.size(orderblocks) > 0
 bool smc_buy_zone  = at_bull_ob or at_bull_breaker or eql_sweep
 bool smc_sell_zone = at_bear_ob or at_bear_breaker or eqh_sweep
 
+// [V15.10] Filtros de Protección Estructural SMC y POIs Opuestos
+bool smc_struct_buy_ok    = not inp_use_smc or not inp_strict_smc_align or (smc_bias != -1) // Prohibido comprar si hay quiebre bajista (Bearish CHoCH/BOS)
+bool smc_struct_sell_ok   = not inp_use_smc or not inp_strict_smc_align or (smc_bias != 1)  // Prohibido vender si hay quiebre alcista (Bullish CHoCH/BOS)
+bool no_opposing_poi_buy  = not inp_use_smc or not inp_block_opposing_poi or (not at_bear_ob and not at_bear_breaker)
+bool no_opposing_poi_sell = not inp_use_smc or not inp_block_opposing_poi or (not at_bull_ob and not at_bull_breaker)
+
 // ==================== ACCIÓN DEL PRECIO & ABSORCIÓN ====================
 candle_range = high[1] - low[1]
 lower_wick = math.min(open[1], close[1]) - low[1]
@@ -447,8 +455,8 @@ avg_body = ta.sma(body, 10)
 is_spike = body[1] > (avg_body * 3.0)
 
 // ==================== DISPAROS SNIPER V15 INSTITUTIONAL ====================
-long_cond_raw  = trend_bull and in_discount and (smc_buy_zone or not inp_use_smc) and rsi < rsi_os and adx > adx_min and not is_spike and pa_buy_ok and not is_extreme_news_volatility and in_killzone
-short_cond_raw = trend_bear and in_premium  and (smc_sell_zone or not inp_use_smc) and rsi > rsi_ob and adx > adx_min and not is_spike and pa_sell_ok and not is_extreme_news_volatility and in_killzone
+long_cond_raw  = trend_bull and in_discount and (smc_buy_zone or not inp_use_smc) and smc_struct_buy_ok and no_opposing_poi_buy and rsi < rsi_os and adx > adx_min and not is_spike and pa_buy_ok and not is_extreme_news_volatility and in_killzone
+short_cond_raw = trend_bear and in_premium  and (smc_sell_zone or not inp_use_smc) and smc_struct_sell_ok and no_opposing_poi_sell and rsi > rsi_ob and adx > adx_min and not is_spike and pa_sell_ok and not is_extreme_news_volatility and in_killzone
 
 // Evitar alertas duplicadas en velas consecutivas
 var int last_trade_bar = na
@@ -522,7 +530,8 @@ if barstate.islast and inp_show_hud
 
     // Fila 2: Estructura SMC
     table.cell(dash, 0, 2, "Estructura SMC", text_color=c_white)
-    table.cell(dash, 1, 2, market_structure, text_color= str.contains(market_structure, "BULLISH") ? c_lime : str.contains(market_structure, "BEARISH") ? c_red : c_gray)
+    string struct_perm = smc_bias == 1 ? " [Solo BUY]" : smc_bias == -1 ? " [Solo SELL]" : ""
+    table.cell(dash, 1, 2, market_structure + struct_perm, text_color= str.contains(market_structure, "BULLISH") ? c_lime : str.contains(market_structure, "BEARISH") ? c_red : c_gray)
 
     // Fila 3: Rango Premium / Descuento
     table.cell(dash, 0, 3, "Rango Institucional", text_color=c_white)

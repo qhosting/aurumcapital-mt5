@@ -5,6 +5,17 @@
 //|   V15.00 - Institutional Risk, Reconciliation & Pre-Flight Validation  |
 //+------------------------------------------------------------------+
 #property description "AurumSniper Institutional V15: Risk Guard, Order Reconciliation & Pre-Flight Validation Engine"
+// CHANGELOG V15.20:
+//  [V15.20] KILLZONE FOREX OBLIGATORIA, MUTEX USD ANTI-RACE CONDITION & PISO SL REALISTA:
+//          - InpUseHighLiquiditySession = true: Forex opera estrictamente en Londres y NY (01:15 a 12:00 CDMX). Erradica pérdidas nocturnas en Asia.
+//          - Mutex Inter-Chart ("AURUM_USD_DISPATCH_TIME"): Evita que EURUSD y GBPUSD disparen órdenes en el mismo milisegundo.
+//          - Piso Mínimo de SL en Forex adaptado a M15: EURUSD (14 pips), GBPUSD (16 pips), USDJPY (15 pips) evitando barridos por ruido nocturno de 7 pips.
+// CHANGELOG V15.10:
+//  [V15.10] FILTROS DE ALINEACION SMC & PROTECCION DE POI OPUESTO:
+//          - InpStrictSMCAlign: Bloquea ventas si la estructura SMC local está en Bullish CHoCH/BOS, y compras en Bearish CHoCH/BOS.
+//          - InpBlockOpposingPOI: Bloquea disparos si el precio está testeando simultáneamente un POI opuesto activo (ej: no vender sobre Bull Breaker/OB).
+//          - IsSMCStructureAligned() & HasOpposingSMCZone() integrados en evaluación OnTick() y DebugSignalMiss().
+//          - Dashboard enriquecido con indicador de permiso de estructura SMC en vivo.
 // CHANGELOG V13.50:
 //  [V13.50] OPTIMIZACION DE SALIDAS REALISTAS & FILTRO ANTI-NOTICIAS:
 //          - InpRiskReward = 1.8: Target global adaptado a la expansión natural intradía del Oro (+1.8R).
@@ -17,7 +28,7 @@
 //          - CheckMicroTrigger(): Filtro estricto en M1 que previene compras prematuras mientras la vela sigue cayendo.
 //+------------------------------------------------------------------+
 #property copyright "Aurum Capital"
-#property version   "15.00"
+#property version   "15.20"
 #property strict
 
 #include <Trade\Trade.mqh>
@@ -111,7 +122,7 @@ input bool     InpUseLiquidityTraps  = true;
 
 input group "=== FILTROS DE SEGURIDAD Y SESION (V13.00) ==="
 input int      InpCooldownBars             = 2;
-input bool     InpUseHighLiquiditySession  = false;// [V14.2] Operar solo en Sesiones de Alta Liquidez (false = 24h continuas salvo rollover)
+input bool     InpUseHighLiquiditySession  = true; // [V15.20] Operar solo en Sesiones de Alta Liquidez (true = Londres y NY 01:15 a 12:00 CDMX)
 input int      InpSessionStartHourCDMX     = 1;    // Hora Inicio CDMX (01:00 AM)
 input int      InpSessionStartMinCDMX      = 15;   // Minuto Inicio CDMX (01:15 AM - Evita Rollover de Broker)
 input int      InpSessionEndHourCDMX       = 12;   // Hora Cierre CDMX (12:00 PM - Fin Golden Overlap)
@@ -276,20 +287,20 @@ void AutoTuneAssets() {
          g_distancia_puntos = 250; g_rsi_oversold = 44; g_rsi_overbought = 60;
          g_adx_threshold = 15; g_be_trigger = 150; g_atr_multiplier = 2.5;
          g_risk_reward = InpRiskReward; g_momentum_spike_multiplier = 4.5;
-         g_min_sl_price = 70 * _Point; // Minimo 7.0 pips de SL (evita salidas prematuras por mechas en M5)
-         Print("AURUM FOREX V12.97 EURUSD (Spread max: ", g_max_spread, ", SL min: 7.0 pips, R:R 1:", DoubleToString(g_risk_reward,1), ")");
+         g_min_sl_price = (_Period >= PERIOD_M15 ? 140 : 90) * _Point; // [V15.20] Min 14.0 pips en M15 (9.0 en M5)
+         Print("AURUM FOREX V15.20 EURUSD (Spread max: ", g_max_spread, ", SL min: ", DoubleToString(g_min_sl_price/_Point/10.0,1), " pips, R:R 1:", DoubleToString(g_risk_reward,1), ")");
       } else if(StringFind(symbol,"USDJPY") >= 0) {
          g_distancia_puntos = 550; g_rsi_oversold = 46; g_rsi_overbought = 56;
          g_adx_threshold = 15; g_be_trigger = 250; g_atr_multiplier = 2.0;
          g_risk_reward = InpRiskReward; g_momentum_spike_multiplier = 4.0;
-         g_min_sl_price = 80 * _Point; // Minimo 8.0 pips de SL
-         Print("AURUM FOREX V12.97 USDJPY (Spread max: ", g_max_spread, ", SL min: 8.0 pips, R:R 1:", DoubleToString(g_risk_reward,1), ")");
+         g_min_sl_price = (_Period >= PERIOD_M15 ? 150 : 100) * _Point; // [V15.20] Min 15.0 pips en M15 (10.0 en M5)
+         Print("AURUM FOREX V15.20 USDJPY (Spread max: ", g_max_spread, ", SL min: ", DoubleToString(g_min_sl_price/_Point/10.0,1), " pips, R:R 1:", DoubleToString(g_risk_reward,1), ")");
       } else if(StringFind(symbol,"GBPUSD") >= 0) {
          g_distancia_puntos = 350; g_rsi_oversold = 45; g_rsi_overbought = 60;
          g_adx_threshold = 15; g_be_trigger = 300; g_atr_multiplier = 2.0;
          g_risk_reward = InpRiskReward; g_momentum_spike_multiplier = 4.5;
-         g_min_sl_price = 80 * _Point; // Minimo 8.0 pips de SL
-         Print("AURUM FOREX V12.97 GBPUSD (Spread max: ", g_max_spread, ", SL min: 8.0 pips, R:R 1:", DoubleToString(g_risk_reward,1), ")");
+         g_min_sl_price = (_Period >= PERIOD_M15 ? 160 : 100) * _Point; // [V15.20] Min 16.0 pips en M15 (10.0 en M5)
+         Print("AURUM FOREX V15.20 GBPUSD (Spread max: ", g_max_spread, ", SL min: ", DoubleToString(g_min_sl_price/_Point/10.0,1), " pips, R:R 1:", DoubleToString(g_risk_reward,1), ")");
       }
    }
    if(InpAutoCryptoSettings) {
@@ -412,6 +423,8 @@ input int      InpMaxSMCBoxes              = 8;     // Maximo de Cajas SMC simul
 input color    InpBullOBColor              = C'20,60,50'; // Color Bullish OB / FVG
 input color    InpBearOBColor              = C'70,25,35'; // Color Bearish OB / FVG
 input color    InpBreakerColor             = C'25,45,75'; // Color Breaker Block
+input bool     InpStrictSMCAlign           = true;  // [V15.10] Alinear Disparo con Estructura SMC (Anti-CHoCH Contrario)
+input bool     InpBlockOpposingPOI         = true;  // [V15.10] Bloquear Disparo si Hay POI Opuesto Activo
 
 // Estructuras de Datos Institucionales
 struct SOrderBlock {
@@ -754,6 +767,71 @@ bool IsInSMCInstitutionalZone(string direction, double cur_price, bool &has_ob, 
    bool sweep_valid = (direction == "BUY") ? g_smc_liquidity_sweep_buy : g_smc_liquidity_sweep_sell;
    return (has_ob || has_breaker || has_fvg || sweep_valid);
 }
+
+//+------------------------------------------------------------------+
+//| [V15.10] Verificacion de Alineacion Estricta con Estructura SMC  |
+//+------------------------------------------------------------------+
+bool IsSMCStructureAligned(string direction) {
+   if(!InpUseSMCStructures || !InpStrictSMCAlign) return true;
+   // No comprar si la estructura local esta en quiebre bajista (Bearish CHoCH/BOS)
+   if(direction == "BUY"  && g_market_structure_trend == -1) return false;
+   // No vender si la estructura local esta en quiebre alcista (Bullish CHoCH/BOS)
+   if(direction == "SELL" && g_market_structure_trend == 1)  return false;
+   return true;
+}
+
+//+------------------------------------------------------------------+
+//| [V15.10] Verificacion de Conflicto con Zonas Institucionales     |
+//+------------------------------------------------------------------+
+bool HasOpposingSMCZone(string direction, double cur_price) {
+   if(!InpUseSMCStructures || !InpBlockOpposingPOI) return false;
+   double tolerance = 3.0 * _Point;
+   
+   if(direction == "SELL") {
+      // Bloquear venta si el precio esta dentro o rebotando en un Bullish OB o Bullish Breaker activo
+      for(int b = g_total_obs - 1; b >= 0; b--) {
+         if(g_order_blocks[b].is_mitigated) continue;
+         if(g_order_blocks[b].is_bullish) {
+            double top = g_order_blocks[b].top + tolerance;
+            double bot = g_order_blocks[b].bottom - tolerance;
+            if(cur_price >= bot && cur_price <= top) return true;
+         }
+      }
+      if(InpUseFVGFilter) {
+         for(int f = g_total_fvgs - 1; f >= 0; f--) {
+            if(g_fvgs[f].is_mitigated) continue;
+            if(g_fvgs[f].is_bullish) {
+               double top = g_fvgs[f].top + tolerance;
+               double bot = g_fvgs[f].bottom - tolerance;
+               if(cur_price >= bot && cur_price <= top) return true;
+            }
+         }
+      }
+   }
+   else if(direction == "BUY") {
+      // Bloquear compra si el precio esta dentro o chocando contra un Bearish OB o Bearish Breaker activo
+      for(int b = g_total_obs - 1; b >= 0; b--) {
+         if(g_order_blocks[b].is_mitigated) continue;
+         if(!g_order_blocks[b].is_bullish) {
+            double top = g_order_blocks[b].top + tolerance;
+            double bot = g_order_blocks[b].bottom - tolerance;
+            if(cur_price >= bot && cur_price <= top) return true;
+         }
+      }
+      if(InpUseFVGFilter) {
+         for(int f = g_total_fvgs - 1; f >= 0; f--) {
+            if(g_fvgs[f].is_mitigated) continue;
+            if(!g_fvgs[f].is_bullish) {
+               double top = g_fvgs[f].top + tolerance;
+               double bot = g_fvgs[f].bottom - tolerance;
+               if(cur_price >= bot && cur_price <= top) return true;
+            }
+         }
+      }
+   }
+   return false;
+}
+
 
 
 //+------------------------------------------------------------------+
@@ -1441,7 +1519,8 @@ void DebugSignalMiss(string direction, bool trend, bool in_zone,
                      double eff_rsi_overbought, bool cooldown_ok, bool session_ok,
                      bool discount_ok, bool usd_corr_blocked, string conflict_sym,
                      string session_reason, bool micro_ok, string micro_reason,
-                     bool pa_ok, string pa_reason) {
+                     bool pa_ok, string pa_reason,
+                     bool smc_struct_ok = true, bool opposing_poi = false) {
    if(!in_zone && discount_ok) return;
    double open1  = iOpen(_Symbol,  _Period, 1);
    double close1 = iClose(_Symbol, _Period, 1);
@@ -1461,6 +1540,8 @@ void DebugSignalMiss(string direction, bool trend, bool in_zone,
       if(!session_ok)        reason += (session_reason != "" ? (session_reason + " ") : "[Fuera Sesion] ");
       if(!micro_ok)          reason += (micro_reason != "" ? (micro_reason + " ") : "[Micro-Gatillo Pendiente] ");
       if(!pa_ok)             reason += (pa_reason != "" ? (pa_reason + " ") : "[Esperando Giro PA] ");
+      if(!smc_struct_ok)     reason += "[Estructura SMC Bajista (CHoCH/BOS)] ";
+      if(opposing_poi)       reason += "[Chocando con Resistencia/POI Bajista] ";
       if(reason != "") Print("[X-RAY COMPRA OMITIDA] ", _Symbol, ": ", reason);
    }
    if(direction == "SELL" && close1 < open1) {
@@ -1478,6 +1559,8 @@ void DebugSignalMiss(string direction, bool trend, bool in_zone,
       if(!session_ok)        reason += (session_reason != "" ? (session_reason + " ") : "[Fuera Sesion] ");
       if(!micro_ok)          reason += (micro_reason != "" ? (micro_reason + " ") : "[Micro-Gatillo Pendiente] ");
       if(!pa_ok)             reason += (pa_reason != "" ? (pa_reason + " ") : "[Esperando Giro PA] ");
+      if(!smc_struct_ok)     reason += "[Estructura SMC Alcista (CHoCH/BOS)] ";
+      if(opposing_poi)       reason += "[Chocando con Soporte/POI Alcista] ";
       if(reason != "") Print("[X-RAY VENTA OMITIDA] ", _Symbol, ": ", reason);
    }
 }
@@ -1604,16 +1687,21 @@ void OnTick() {
    bool is_spike_buy  = buy_zone_ok  ? IsMomentumSpike("BUY")  : false;
    bool is_spike_sell = sell_zone_ok ? IsMomentumSpike("SELL") : false;
 
+   bool smc_struct_buy_ok  = IsSMCStructureAligned("BUY");
+   bool opposing_poi_buy   = HasOpposingSMCZone("BUY", ask);
+   bool smc_struct_sell_ok = IsSMCStructureAligned("SELL");
+   bool opposing_poi_sell  = HasOpposingSMCZone("SELL", bid);
+
    DebugSignalMiss("BUY",  (trend_bull || (range_bull && is_trap_buy)), buy_zone_ok,  rsi, adx, is_spike_buy,
                    has_open_trade, good_spread, daily_limit_reached,
                    eff_rsi_oversold, eff_rsi_overbought, cooldown_ok, session_ok, discount_buy_ok,
                    usd_corr_blocked_buy, conflict_sym_buy, session_reason, micro_buy_ok, micro_reason_buy,
-                   pa_buy_ok, pa_reason_buy);
+                   pa_buy_ok, pa_reason_buy, smc_struct_buy_ok, opposing_poi_buy);
    DebugSignalMiss("SELL", (trend_bear || (range_bear && is_trap_sell)), sell_zone_ok, rsi, adx, is_spike_sell,
                    has_open_trade, good_spread, daily_limit_reached,
                    eff_rsi_oversold, eff_rsi_overbought, cooldown_ok, session_ok, discount_sell_ok,
                    usd_corr_blocked_sell, conflict_sym_sell, session_reason, micro_sell_ok, micro_reason_sell,
-                   pa_sell_ok, pa_reason_sell);
+                   pa_sell_ok, pa_reason_sell, smc_struct_sell_ok, opposing_poi_sell);
 
    if(has_open_trade || !good_spread || daily_limit_reached || !cooldown_ok || !session_ok) return;
 
@@ -1648,7 +1736,7 @@ void OnTick() {
 
    bool has_ob_buy = false, has_brk_buy = false, has_fvg_buy = false;
    bool smc_buy_ok = IsInSMCInstitutionalZone("BUY", ask, has_ob_buy, has_brk_buy, has_fvg_buy);
-   bool can_buy = (trend_bull || (range_bull && (is_trap_buy || g_smc_liquidity_sweep_buy))) && buy_zone_ok && (!InpUseSMCStructures || smc_buy_ok || g_smc_liquidity_sweep_buy) && (rsi < eff_rsi_oversold) && (adx > g_adx_threshold) && !is_spike_buy && !usd_corr_blocked_buy && micro_buy_ok && pa_buy_ok && !is_news_volatility;
+   bool can_buy = (trend_bull || (range_bull && (is_trap_buy || g_smc_liquidity_sweep_buy))) && buy_zone_ok && (!InpUseSMCStructures || smc_buy_ok || g_smc_liquidity_sweep_buy) && smc_struct_buy_ok && !opposing_poi_buy && (rsi < eff_rsi_oversold) && (adx > g_adx_threshold) && !is_spike_buy && !usd_corr_blocked_buy && micro_buy_ok && pa_buy_ok && !is_news_volatility;
    string preflight_buy_fail = "";
    bool v15_buy_ready = ValidateEnvironmentV15(preflight_buy_fail);
 
@@ -1663,6 +1751,8 @@ void OnTick() {
       double actual_risk_usd = 0, actual_risk_pct = 0;
       double trade_lot = CalculateLotSize(sl_dist, actual_risk_usd, actual_risk_pct);
       if(trade_lot > 0) {
+         int usd_dir_buy = GetUSDDirection(_Symbol, "BUY");
+         if(usd_dir_buy != 0) GlobalVariableSet("AURUM_USD_DISPATCH_TIME", (double)TimeCurrent());
          if(trade.Buy(trade_lot, _Symbol, ask, sl, tp, "Aurum V15 Sniper")) {
             g_daily_trades++;
             PrintFormat("[COMPRA%s] Lote:%.2f SL:%.2f TP:%.2f | Riesgo: -$%.2f (%.1f%%) | SL_dist:$%.2f (%.0f pts) | ATR:%.2f | R:R 1:%.1f%s%s",
@@ -1674,7 +1764,7 @@ void OnTick() {
    }
    bool has_ob_sell = false, has_brk_sell = false, has_fvg_sell = false;
    bool smc_sell_ok = IsInSMCInstitutionalZone("SELL", bid, has_ob_sell, has_brk_sell, has_fvg_sell);
-   bool can_sell = (trend_bear || (range_bear && (is_trap_sell || g_smc_liquidity_sweep_sell))) && sell_zone_ok && (!InpUseSMCStructures || smc_sell_ok || g_smc_liquidity_sweep_sell) && (rsi > eff_rsi_overbought) && (adx > g_adx_threshold) && !is_spike_sell && !usd_corr_blocked_sell && micro_sell_ok && pa_sell_ok && !is_news_volatility;
+   bool can_sell = (trend_bear || (range_bear && (is_trap_sell || g_smc_liquidity_sweep_sell))) && sell_zone_ok && (!InpUseSMCStructures || smc_sell_ok || g_smc_liquidity_sweep_sell) && smc_struct_sell_ok && !opposing_poi_sell && (rsi > eff_rsi_overbought) && (adx > g_adx_threshold) && !is_spike_sell && !usd_corr_blocked_sell && micro_sell_ok && pa_sell_ok && !is_news_volatility;
    string preflight_sell_fail = "";
    bool v15_sell_ready = ValidateEnvironmentV15(preflight_sell_fail);
 
@@ -1689,6 +1779,8 @@ void OnTick() {
       double actual_risk_usd = 0, actual_risk_pct = 0;
       double trade_lot = CalculateLotSize(sl_dist, actual_risk_usd, actual_risk_pct);
       if(trade_lot > 0) {
+         int usd_dir_sell = GetUSDDirection(_Symbol, "SELL");
+         if(usd_dir_sell != 0) GlobalVariableSet("AURUM_USD_DISPATCH_TIME", (double)TimeCurrent());
          if(trade.Sell(trade_lot, _Symbol, bid, sl, tp, "Aurum V15 Sniper")) {
             g_daily_trades++;
             PrintFormat("[VENTA%s] Lote:%.2f SL:%.2f TP:%.2f | Riesgo: -$%.2f (%.1f%%) | SL_dist:$%.2f (%.0f pts) | ATR:%.2f | R:R 1:%.1f%s%s",
@@ -2259,6 +2351,18 @@ void UpdateDashboard() {
    DrawLabel("lbl_TrailMode", "Gestión SL: " + trail_mode_txt, 20, y, InpUseStepTrailing ? clrLime : clrSilver, 10); y += 20;
 
    DrawLabel("lbl_Trend", "Tendencia H1: " + trend_txt, 20, y, trend_clr, 10); y += 20;
+
+   if(InpUseSMCStructures) {
+      string smc_str_txt = (g_market_structure_trend == 1) ? "BULLISH (CHoCH/BOS) [Solo BUY]"
+                         : (g_market_structure_trend == -1) ? "BEARISH (CHoCH/BOS) [Solo SELL]"
+                         : "NEUTRO / EN RANGO";
+      color smc_str_clr = (g_market_structure_trend == 1) ? clrLime
+                        : (g_market_structure_trend == -1) ? clrRed
+                        : clrSilver;
+      DrawLabel("lbl_SMC_Structure", "Estructura SMC: " + smc_str_txt, 20, y, smc_str_clr, 10); y += 20;
+   } else {
+      ObjectDelete(0, "lbl_SMC_Structure");
+   }
    
    bool disc_ok = (price > ma) ? IsInDiscountPremiumZone("BUY") : IsInDiscountPremiumZone("SELL");
    string disc_txt = (price > ma) ? (disc_ok ? "ZONA DESCUENTO (COMPRA OK)" : "ZONA PREMIUM (CARA - ESPERAR)")
@@ -2485,6 +2589,15 @@ bool HasUnprotectedCorrelatedUSDPosition(string symbol, string new_order_type, s
    if(!InpBlockCorrelatedUSDRisk) return false;
    int new_usd_dir = GetUSDDirection(symbol, new_order_type);
    if(new_usd_dir == 0) return false;
+
+   // [V15.20 Anti-Race Condition] Si otra divisa USD disparó hace menos de 15 segundos, bloquear disparo concurrente
+   if(GlobalVariableCheck("AURUM_USD_DISPATCH_TIME")) {
+      datetime last_disp = (datetime)GlobalVariableGet("AURUM_USD_DISPATCH_TIME");
+      if(TimeCurrent() - last_disp < 15) {
+         conflict_sym = "MUTEX_USD_CONCURRENTE";
+         return true;
+      }
+   }
    
    for(int i = PositionsTotal() - 1; i >= 0; i--) {
       ulong ticket = PositionGetTicket(i);
