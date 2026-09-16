@@ -45,12 +45,20 @@ public:
 
       double balance = AccountInfoDouble(ACCOUNT_BALANCE);
       double equity  = AccountInfoDouble(ACCOUNT_EQUITY);
+      long accLogin  = AccountInfoInteger(ACCOUNT_LOGIN);
+      string broker  = AccountInfoString(ACCOUNT_COMPANY);
+      string server  = AccountInfoString(ACCOUNT_SERVER);
+      string accType = (AccountInfoInteger(ACCOUNT_TRADE_MODE) == ACCOUNT_TRADE_MODE_REAL) ? "REAL" :
+                       ((AccountInfoInteger(ACCOUNT_TRADE_MODE) == ACCOUNT_TRADE_MODE_DEMO) ? "DEMO" : "CONTEST");
+      string accName = broker + " #" + IntegerToString(accLogin);
 
       string json = StringFormat(
          "{\"ticket\":%I64u,\"magicNumber\":%d,\"action\":\"OPEN\",\"symbol\":\"%s\",\"type\":\"%s\","
          "\"price\":%.5f,\"sl\":%.5f,\"tp\":%.5f,\"lotSize\":%.2f,\"riskPercent\":%.2f,"
-         "\"setup\":\"%s\",\"accountBalance\":%.2f,\"accountEquity\":%.2f}",
-         ticket, magic, symbol, type, price, sl, tp, lot, risk_pct, setup, balance, equity
+         "\"setup\":\"%s\",\"accountBalance\":%.2f,\"accountEquity\":%.2f,"
+         "\"accountNumber\":\"%I64d\",\"accountName\":\"%s\",\"accountType\":\"%s\",\"broker\":\"%s\",\"server\":\"%s\"}",
+         ticket, magic, symbol, type, price, sl, tp, lot, risk_pct, setup, balance, equity,
+         accLogin, accName, accType, broker, server
       );
 
       return PostWebhook(json);
@@ -73,12 +81,20 @@ public:
 
       double balance = AccountInfoDouble(ACCOUNT_BALANCE);
       double equity  = AccountInfoDouble(ACCOUNT_EQUITY);
+      long accLogin  = AccountInfoInteger(ACCOUNT_LOGIN);
+      string broker  = AccountInfoString(ACCOUNT_COMPANY);
+      string server  = AccountInfoString(ACCOUNT_SERVER);
+      string accType = (AccountInfoInteger(ACCOUNT_TRADE_MODE) == ACCOUNT_TRADE_MODE_REAL) ? "REAL" :
+                       ((AccountInfoInteger(ACCOUNT_TRADE_MODE) == ACCOUNT_TRADE_MODE_DEMO) ? "DEMO" : "CONTEST");
+      string accName = broker + " #" + IntegerToString(accLogin);
 
       string json = StringFormat(
          "{\"ticket\":%I64u,\"magicNumber\":%d,\"action\":\"CLOSE\",\"symbol\":\"%s\",\"type\":\"%s\","
          "\"price\":%.5f,\"profit\":%.2f,\"commission\":%.2f,\"swap\":%.2f,\"lotSize\":%.2f,"
-         "\"setup\":\"%s\",\"accountBalance\":%.2f,\"accountEquity\":%.2f,\"comment\":\"%s\"}",
-         ticket, magic, symbol, type, close_price, profit, commission, swap, lot, setup, balance, equity, comment
+         "\"setup\":\"%s\",\"accountBalance\":%.2f,\"accountEquity\":%.2f,\"comment\":\"%s\","
+         "\"accountNumber\":\"%I64d\",\"accountName\":\"%s\",\"accountType\":\"%s\",\"broker\":\"%s\",\"server\":\"%s\"}",
+         ticket, magic, symbol, type, close_price, profit, commission, swap, lot, setup, balance, equity, comment,
+         accLogin, accName, accType, broker, server
       );
 
       return PostWebhook(json);
