@@ -287,11 +287,14 @@ void AutoTuneAssets() {
    if(InpAutoForexSettings) {
       string symbol = _Symbol; StringToUpper(symbol);
       if(StringFind(symbol,"EURUSD") >= 0) {
-         g_distancia_puntos = 250; g_rsi_oversold = 44; g_rsi_overbought = 60;
-         g_adx_threshold = 15; g_be_trigger = 150; g_atr_multiplier = 2.5;
+         g_distancia_puntos = 250; g_rsi_oversold = 42; g_rsi_overbought = 58;
+         g_adx_threshold = 18; g_be_trigger = 120; g_atr_multiplier = 2.2;
          g_risk_reward = InpRiskReward; g_momentum_spike_multiplier = 4.5;
-         g_min_sl_price = (_Period >= PERIOD_M15 ? 140 : 90) * _Point; // [V15.20] Min 14.0 pips en M15 (9.0 en M5)
-         Print("AURUM FOREX V15.20 EURUSD (Spread max: ", g_max_spread, ", SL min: ", DoubleToString(g_min_sl_price/_Point/10.0,1), " pips, R:R 1:", DoubleToString(g_risk_reward,1), ")");
+         g_max_spread = 22; // [V15.30] Spread maximo 2.2 pips en Forex
+         g_min_sl_price = (_Period >= PERIOD_M15 ? 150 : 100) * _Point; // [V15.30] Min 15.0 pips de holgura en M15 (evita barridos de 7 pips)
+         g_max_sl_price = 250 * _Point; // [V15.30] Techo maximo de 25.0 pips
+         PrintFormat("AURUM FOREX V15.30 EURUSD: Spread max %d pts, SL [%.1f - %.1f] pips, BE %d pts, R:R 1:%.1f",
+                     g_max_spread, g_min_sl_price/_Point/10.0, g_max_sl_price/_Point/10.0, g_be_trigger, g_risk_reward);
       } else if(StringFind(symbol,"USDJPY") >= 0) {
          g_distancia_puntos = 550; g_rsi_oversold = 46; g_rsi_overbought = 56;
          g_adx_threshold = 15; g_be_trigger = 250; g_atr_multiplier = 2.0;
@@ -1331,8 +1334,10 @@ bool IsTradingSession(string &session_reason) {
       }
    }
 
-   // [V13.00] Filtro de Sesiones de Alta Liquidez CDMX (Londres + NY: 01:15 a 12:00 CDMX)
-   bool apply_killzone = InpUseHighLiquiditySession;
+   // [V15.30] Filtro de Sesiones de Alta Liquidez CDMX (Londres + NY: 01:15 a 12:00 CDMX)
+   // Obligatorio para Forex (EURUSD, GBPUSD, USDJPY) para erradicar perdidas nocturnas en Asia (20:00 - 01:14)
+   bool is_forex = (!is_crypto && !is_metal);
+   bool apply_killzone = InpUseHighLiquiditySession || is_forex;
    if(is_crypto && InpSessionFilterForexOnly) apply_killzone = false;
    if(is_metal && !InpSessionFilterMetals)    apply_killzone = false;
 
@@ -1765,7 +1770,7 @@ void OnTick() {
             ulong t_ticket = trade.ResultOrder();
             g_station_bridge.SendOrderOpen(t_ticket, InpMagicNumber, _Symbol, "BUY", ask, sl, tp, trade_lot, actual_risk_pct, "Aurum V15 Sniper");
             g_daily_trades++;
-            PrintFormat("[COMPRA%s] Lote:%.2f SL:%.2f TP:%.2f | Riesgo: -$%.2f (%.1f%%) | SL_dist:$%.2f (%.0f pts) | ATR:%.2f | R:R 1:%.1f%s%s",
+            PrintFormat("[COMPRA%s] Lote:%.2f SL:%.2f TP:%.2f | Riesgo: -$%.2f (%.1f%%) | SL_dist:%.1f pips (%.0f pts) | ATR:%.1f pips | R:R 1:%.1f%s%s",
                         (trend_bull ? "" : " RANGO"), trade_lot, sl, tp, actual_risk_usd, actual_risk_pct, sl_dist, sl_dist/_Point, atr, g_risk_reward,
                         (InpUseMicroTrigger ? " [M1-TRIGGER OK]" : ""),
                         (g_consecutive_losses >= 2 ? " [ANTI-CASCADE]": ""));
@@ -1793,7 +1798,7 @@ void OnTick() {
          if(usd_dir_sell != 0) GlobalVariableSet("AURUM_USD_DISPATCH_TIME", (double)TimeCurrent());
          if(trade.Sell(trade_lot, _Symbol, bid, sl, tp, "Aurum V15 Sniper")) {
             g_daily_trades++;
-            PrintFormat("[VENTA%s] Lote:%.2f SL:%.2f TP:%.2f | Riesgo: -$%.2f (%.1f%%) | SL_dist:$%.2f (%.0f pts) | ATR:%.2f | R:R 1:%.1f%s%s",
+            PrintFormat("[VENTA%s] Lote:%.2f SL:%.2f TP:%.2f | Riesgo: -$%.2f (%.1f%%) | SL_dist:%.1f pips (%.0f pts) | ATR:%.1f pips | R:R 1:%.1f%s%s",
                         (trend_bear ? "" : " RANGO"), trade_lot, sl, tp, actual_risk_usd, actual_risk_pct, sl_dist, sl_dist/_Point, atr, g_risk_reward,
                         (InpUseMicroTrigger ? " [M1-TRIGGER OK]" : ""),
                         (g_consecutive_losses >= 2 ? " [ANTI-CASCADE]": ""));
