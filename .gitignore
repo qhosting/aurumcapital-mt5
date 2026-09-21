@@ -2,3 +2,6 @@
 *.bak
 __pycache__/
 scratch/
+
+staging_station/
+

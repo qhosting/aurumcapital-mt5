@@ -2,41 +2,40 @@
 //|                                         AurumSniperMicro.mq5     |
 //|                    Copyright 2026, Aurum Capital                 |
 //|      Edición Especial Micro (XM / Forex / Oro / Índices / Cripto)|
-//|   V15.00 - Institutional Risk, Reconciliation & Pre-Flight Validation  |
+//|   V15.30 - Institutional SMC + Opwens Candlesticks + Classical Confluence  |
 //+------------------------------------------------------------------+
-#property description "AurumSniper Institutional V15: Risk Guard, Order Reconciliation & Pre-Flight Validation Engine"
+#property description "AurumSniper Institutional V15.30: SMC + Opwens Candlestick Triggers & Classical Confluence (Micro Edition)"
+// CHANGELOG V15.30:
+//  [V15.30] GATILLOS CANDLESTICK OPWENS, CONFLUENCIA CARTISTA MODULO 2 & SPREAD ADAPTATIVO:
+//          - Integración de CAurumCandleTriggers (Libro Opwens): 14 formaciones cuantitativas de giro en POIs SMC.
+//          - Integración de CAurumClassicPatterns (Módulo 2): Escaneo de HCH, Dobles/Triples y Triángulos/Banderas para confluencia institucional.
+//          - GetAdaptiveMaxSpread(): Auto-calibración de spread en Oro/GOLDmicro (75 pts), Cripto (6000 pts) e Índices (1200 pts).
+//          - Dashboard HUD enriquecido con estado de Gatillo Opwens y Figura Cartista en vivo.
 // CHANGELOG V15.20:
 //  [V15.20] KILLZONE FOREX OBLIGATORIA, MUTEX USD ANTI-RACE CONDITION & PISO SL REALISTA:
 //          - InpUseHighLiquiditySession = true: Forex opera estrictamente en Londres y NY (01:15 a 12:00 CDMX). Erradica pérdidas nocturnas en Asia.
 //          - Mutex Inter-Chart ("AURUM_USD_DISPATCH_TIME"): Evita que EURUSD y GBPUSD disparen órdenes en el mismo milisegundo.
 //          - Piso Mínimo de SL en Forex adaptado a M15: EURUSD (14 pips), GBPUSD (16 pips), USDJPY (15 pips) evitando barridos por ruido nocturno de 7 pips.
-// CHANGELOG V15.10:
-//  [V15.10] FILTROS DE ALINEACION SMC & PROTECCION DE POI OPUESTO:
-//          - InpStrictSMCAlign: Bloquea ventas si la estructura SMC local está en Bullish CHoCH/BOS, y compras en Bearish CHoCH/BOS.
-//          - InpBlockOpposingPOI: Bloquea disparos si el precio está testeando simultáneamente un POI opuesto activo (ej: no vender sobre Bull Breaker/OB).
-//          - IsSMCStructureAligned() & HasOpposingSMCZone() integrados en evaluación OnTick() y DebugSignalMiss().
-//          - Dashboard enriquecido con indicador de permiso de estructura SMC en vivo.
-// CHANGELOG V13.50:
-//  [V13.50] OPTIMIZACION DE SALIDAS REALISTAS & FILTRO ANTI-NOTICIAS:
-//          - InpRiskReward = 1.8: Target global adaptado a la expansión natural intradía del Oro (+1.8R).
-//          - InpStep1_TriggerR = 0.8R / InpPartialPercent = 60.0%: 60% parcial al primer impulso y SL a BE protegido.
-//          - InpStep2_TriggerR = 1.8R: Cierre del 40% restante en +1.8R ($25 a $32 USD de ganancia limpia).
-//          - InpGoldMaxSL = 18.0: Techo máximo de Stop Loss ($18.00) que evita SL inflados por noticias.
-//          - InpMaxAllowedATR = 15.0: Filtro Anti-Noticias que pausa compras/ventas si el ATR supera $15.00 USD.
-//  [V13.40] CONFIRMACION DE ACCION DEL PRECIO Y ABSORCION:
-//          - CheckPriceActionConfirmation(): Exige vela de giro o mecha de absorción en soporte/resistencia antes de disparar.
-//          - CheckMicroTrigger(): Filtro estricto en M1 que previene compras prematuras mientras la vela sigue cayendo.
 //+------------------------------------------------------------------+
 #property copyright "Aurum Capital"
-#property version   "15.20"
+#property version   "15.30"
 #property strict
 
 #include <Trade\Trade.mqh>
+#include <AurumClassic\AurumTrendGeometry.mqh>
+#include <AurumClassic\AurumCandleTriggers.mqh>
+#include <AurumClassic\AurumClassicPatterns.mqh>
 #include "Include\AurumStationBridge.mqh"
 
 CAurumStationBridge g_station_bridge;
 
 // ==================== INPUTS ====================
+input group "=== CONFLUENCIA CLÁSICA & GATILLOS OPWENS (V15.30) ==="
+input bool     InpUseOpwensTriggers        = true;  // [V15.30] Activar Gatillos de Velas de Alta Probabilidad (Libro Opwens)
+input bool     InpStrictOpwensOnly         = false; // [V15.30] Exigir estrictamente una de las 14 velas de Opwens (false = flexible con mecha >= 35%)
+input bool     InpUseClassicPatterns       = true;  // [V15.30] Escanear Figuras Cartistas de Módulo 2 para Confluencia
+input bool     InpRequirePatternConfluence = false; // [V15.30] Exigir figura clásica alineada (false = bono de confluencia)
+
 input group "=== GESTIÓN DE RIESGO INSTITUCIONAL & PROTECCIÓN DIARIA (V15) ==="
 input int      InpMagicNumber             = 777998; // Magic Number de identificación
 input double   InpLotSize                 = 0.1;   // Lote base para operativa estándar
@@ -154,6 +153,11 @@ input int             InpMicroTriggerEMA       = 9;          // [V13.10] Periodo
 
 // ==================== GLOBALES ====================
 CTrade trade;
+CAurumCandleTriggers    g_opwens_candles;
+CAurumClassicPatterns   g_classic_patterns;
+ClassicChartPattern     g_detected_classic_pattern;
+ENUM_CANDLE_PATTERN     g_last_detected_candle = CANDLE_NONE;
+
 int hMA, hMA_HTF, hMA_Micro = INVALID_HANDLE, hRSI, hADX, hATR;
 double   g_start_equity   = 0;
 datetime g_last_reset_day = 0;
@@ -1079,6 +1083,10 @@ int OnInit() {
    trade.SetExpertMagicNumber(MAGIC_NUMBER);
    g_station_bridge.Init(InpStationSyncEnabled, InpStationWebhookUrl, InpStationApiKey);
    AutoTuneAssets();
+   g_opwens_candles.Init(_Symbol);
+   g_classic_patterns.Init(_Symbol, _Period, 4);
+   g_detected_classic_pattern.type = PATTERN_NONE;
+
    g_start_equity = AccountInfoDouble(ACCOUNT_EQUITY);
    g_last_reset_day = iTime(_Symbol, PERIOD_D1, 0);
    g_last_bar_time = iTime(_Symbol, _Period, 0);
@@ -1428,9 +1436,30 @@ bool IsInDiscountPremiumZone(string type) {
 }
 
 //+------------------------------------------------------------------+
-// [V13.80] Confirmación de Acción del Precio (Vela de Giro y Absorción)
+// [V15.30] Confirmación de Acción del Precio (Gatillos Opwens & Absorción)
 bool CheckPriceActionConfirmation(string direction, string &pa_reason) {
    pa_reason = "";
+   
+   // 1. Evaluación con el Motor Cuantitativo del Libro Opwens
+   if(InpUseOpwensTriggers) {
+      MqlRates rates[];
+      ArraySetAsSeries(rates, true);
+      int copied = CopyRates(_Symbol, _Period, 0, 10, rates);
+      if(copied >= 4) {
+         ENUM_CANDLE_PATTERN opw = g_opwens_candles.ScanBar(rates, 1, (direction == "BUY"));
+         if(opw != CANDLE_NONE) {
+            g_last_detected_candle = opw;
+            pa_reason = StringFormat("[Gatillo Opwens: %s]", g_opwens_candles.GetPatternName(opw));
+            return true;
+         }
+         else if(InpStrictOpwensOnly) {
+            pa_reason = "[Esperando Gatillo Opwens en POI]";
+            return false;
+         }
+      }
+   }
+
+   // 2. Filtro de Giro y Absorción de Respaldo
    double open1  = iOpen(_Symbol,  _Period, 1);
    double close1 = iClose(_Symbol, _Period, 1);
    double high1  = iHigh(_Symbol,  _Period, 1);
@@ -1454,6 +1483,8 @@ bool CheckPriceActionConfirmation(string direction, string &pa_reason) {
          pa_reason = "[Esperando Giro: Vela 1 aún cayendo sin rechazo]";
          return false;
       }
+      if(is_absorption_pinbar) pa_reason = "[Gatillo Absorción/Pinbar en POI]";
+      else pa_reason = "[Giro Vela Verde Confirmado]";
       return true;
    }
    else if(direction == "SELL") {
@@ -1470,6 +1501,8 @@ bool CheckPriceActionConfirmation(string direction, string &pa_reason) {
          pa_reason = "[Esperando Giro: Vela 1 aún subiendo sin rechazo]";
          return false;
       }
+      if(is_absorption_pinbar) pa_reason = "[Gatillo Absorción/Pinbar en POI]";
+      else pa_reason = "[Giro Vela Roja Confirmado]";
       return true;
    }
    return true;
@@ -1583,7 +1616,22 @@ void DebugSignalMiss(string direction, bool trend, bool in_zone,
 //+------------------------------------------------------------------+
 void OnTick() {
    bool new_bar = IsNewBar();
-   if(new_bar) { UpdateIndicatorCache(); UpdateSMCStructures(); }
+   if(new_bar) { 
+      UpdateIndicatorCache(); 
+      UpdateSMCStructures(); 
+      if(InpUseClassicPatterns) {
+         MqlRates pat_rates[];
+         ArraySetAsSeries(pat_rates, true);
+         int pat_copied = CopyRates(_Symbol, _Period, 0, 100, pat_rates);
+         if(pat_copied >= 40) {
+            ClassicChartPattern pat;
+            if(g_classic_patterns.ScanCurrentPattern(pat_rates, pat_copied, pat))
+               g_detected_classic_pattern = pat;
+            else
+               g_detected_classic_pattern.type = PATTERN_NONE;
+         }
+      }
+   }
    else        UpdateATRCache();
    CheckAndResetDaily();
    
@@ -1592,11 +1640,9 @@ void OnTick() {
    ReconcileOpenPositions();
    
    if(g_daily_killswitch_active || CheckDailyDrawdown()) {
-      Comment(StringFormat("\n⚠️ [V15 RISK GUARD] MAX DRAWDOWN / LIMITE DIARIO ALCANZADO (P&L Hoy: $%.2f). Operaciones pausadas.", g_daily_closed_pnl + g_daily_floating_pnl));
+      Comment("");
       GestionarPosicionesPro();
       return;
-   } else if(g_consecutive_cooldown_until > TimeCurrent()) {
-      Comment(StringFormat("\n⏳ [V15 DISYUNTOR] Enfriamiento tras %d pérdidas consecutivas. Pausa activa hasta %s.", g_consecutive_losses, TimeToString(g_consecutive_cooldown_until, TIME_MINUTES)));
    } else {
       Comment("");
    }
@@ -1640,6 +1686,14 @@ void OnTick() {
       range_bear = true; // Permite venta si está en zona Premium extrema + mecha de rechazo M1
    }
 
+   double ask = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
+   double bid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
+
+   bool has_ob_buy = false, has_brk_buy = false, has_fvg_buy = false;
+   bool smc_buy_ok = IsInSMCInstitutionalZone("BUY", ask, has_ob_buy, has_brk_buy, has_fvg_buy);
+   bool has_ob_sell = false, has_brk_sell = false, has_fvg_sell = false;
+   bool smc_sell_ok = IsInSMCInstitutionalZone("SELL", bid, has_ob_sell, has_brk_sell, has_fvg_sell);
+
    bool in_zone_buy  = IsInZone("BUY",  ma_h1, adx, atr);
    bool in_zone_sell = IsInZone("SELL", ma_h1, adx, atr);
    bool is_trap_buy  = InpUseLiquidityTraps ? CheckLiquidityTrap("BUY")  : false;
@@ -1648,8 +1702,8 @@ void OnTick() {
    bool discount_buy_ok  = IsInDiscountPremiumZone("BUY");
    bool discount_sell_ok = IsInDiscountPremiumZone("SELL");
 
-   bool buy_zone_ok  = (in_zone_buy  || is_trap_buy)  && discount_buy_ok;
-   bool sell_zone_ok = (in_zone_sell || is_trap_sell) && discount_sell_ok;
+   bool buy_zone_ok  = (in_zone_buy  || is_trap_buy  || g_smc_liquidity_sweep_buy  || smc_buy_ok)  && discount_buy_ok;
+   bool sell_zone_ok = (in_zone_sell || is_trap_sell || g_smc_liquidity_sweep_sell || smc_sell_ok) && discount_sell_ok;
 
    // [V13.70] RSI Adaptativo en Pullback de Tendencia:
    // En tendencia alcista fuerte, el pullback suele soportarse en RSI 45 - 52 (no en < 38).
@@ -1664,9 +1718,10 @@ void OnTick() {
       if(trend_bull) eff_rsi_oversold   += 3.0; // Hasta 55.0 en tendencia fuerte
       if(trend_bear) eff_rsi_overbought -= 3.0; // Hasta 45.0 en tendencia fuerte
    }
-
-   double ask = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
-   double bid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
+   // [V15.35] En rebotes de POI Institucional o Barridos (SWEEP), el RSI asciende rápidamente desde sobreventa.
+   // Permitimos hasta 48.0 para compras y 52.0 para ventas para no perder la vela de confirmación de 1 barra.
+   if(g_smc_liquidity_sweep_buy || smc_buy_ok)   eff_rsi_oversold   = MathMax(eff_rsi_oversold, 48.0);
+   if(g_smc_liquidity_sweep_sell || smc_sell_ok) eff_rsi_overbought = MathMin(eff_rsi_overbought, 52.0);
 
    bool has_open_trade      = IsPositionOpenOnSymbol();
    bool good_spread         = CheckSpread();
@@ -1705,12 +1760,12 @@ void OnTick() {
    bool smc_struct_sell_ok = IsSMCStructureAligned("SELL");
    bool opposing_poi_sell  = HasOpposingSMCZone("SELL", bid);
 
-   DebugSignalMiss("BUY",  (trend_bull || (range_bull && is_trap_buy)), buy_zone_ok,  rsi, adx, is_spike_buy,
+   DebugSignalMiss("BUY",  (trend_bull || range_bull || g_smc_liquidity_sweep_buy || (smc_buy_ok && smc_struct_buy_ok)), buy_zone_ok,  rsi, adx, is_spike_buy,
                    has_open_trade, good_spread, daily_limit_reached,
                    eff_rsi_oversold, eff_rsi_overbought, cooldown_ok, session_ok, discount_buy_ok,
                    usd_corr_blocked_buy, conflict_sym_buy, session_reason, micro_buy_ok, micro_reason_buy,
                    pa_buy_ok, pa_reason_buy, smc_struct_buy_ok, opposing_poi_buy);
-   DebugSignalMiss("SELL", (trend_bear || (range_bear && is_trap_sell)), sell_zone_ok, rsi, adx, is_spike_sell,
+   DebugSignalMiss("SELL", (trend_bear || range_bear || g_smc_liquidity_sweep_sell || (smc_sell_ok && smc_struct_sell_ok)), sell_zone_ok, rsi, adx, is_spike_sell,
                    has_open_trade, good_spread, daily_limit_reached,
                    eff_rsi_oversold, eff_rsi_overbought, cooldown_ok, session_ok, discount_sell_ok,
                    usd_corr_blocked_sell, conflict_sym_sell, session_reason, micro_sell_ok, micro_reason_sell,
@@ -1747,9 +1802,15 @@ void OnTick() {
       if(bar1_range > atr * 2.8) is_news_volatility = true; // Vela de impacto macro anómala
    }
 
-   bool has_ob_buy = false, has_brk_buy = false, has_fvg_buy = false;
-   bool smc_buy_ok = IsInSMCInstitutionalZone("BUY", ask, has_ob_buy, has_brk_buy, has_fvg_buy);
-   bool can_buy = (trend_bull || (range_bull && (is_trap_buy || g_smc_liquidity_sweep_buy))) && buy_zone_ok && (!InpUseSMCStructures || smc_buy_ok || g_smc_liquidity_sweep_buy) && smc_struct_buy_ok && !opposing_poi_buy && (rsi < eff_rsi_oversold) && (adx > g_adx_threshold) && !is_spike_buy && !usd_corr_blocked_buy && micro_buy_ok && pa_buy_ok && !is_news_volatility;
+   // [V15.30] Confluencia Opcional con Figuras Cartistas (Módulo 2)
+   bool pattern_confluence_buy  = true;
+   bool pattern_confluence_sell = true;
+   if(InpRequirePatternConfluence) {
+      pattern_confluence_buy  = (g_detected_classic_pattern.type != PATTERN_NONE && g_detected_classic_pattern.isBullish);
+      pattern_confluence_sell = (g_detected_classic_pattern.type != PATTERN_NONE && !g_detected_classic_pattern.isBullish);
+   }
+
+   bool can_buy = (trend_bull || range_bull || g_smc_liquidity_sweep_buy || (smc_buy_ok && smc_struct_buy_ok)) && buy_zone_ok && (!InpUseSMCStructures || smc_buy_ok || g_smc_liquidity_sweep_buy) && smc_struct_buy_ok && !opposing_poi_buy && (rsi < eff_rsi_oversold) && (adx > g_adx_threshold) && !is_spike_buy && !usd_corr_blocked_buy && micro_buy_ok && pa_buy_ok && pattern_confluence_buy && !is_news_volatility;
    string preflight_buy_fail = "";
    bool v15_buy_ready = ValidateEnvironmentV15(preflight_buy_fail);
 
@@ -1777,9 +1838,7 @@ void OnTick() {
          }
       }
    }
-   bool has_ob_sell = false, has_brk_sell = false, has_fvg_sell = false;
-   bool smc_sell_ok = IsInSMCInstitutionalZone("SELL", bid, has_ob_sell, has_brk_sell, has_fvg_sell);
-   bool can_sell = (trend_bear || (range_bear && (is_trap_sell || g_smc_liquidity_sweep_sell))) && sell_zone_ok && (!InpUseSMCStructures || smc_sell_ok || g_smc_liquidity_sweep_sell) && smc_struct_sell_ok && !opposing_poi_sell && (rsi > eff_rsi_overbought) && (adx > g_adx_threshold) && !is_spike_sell && !usd_corr_blocked_sell && micro_sell_ok && pa_sell_ok && !is_news_volatility;
+   bool can_sell = (trend_bear || range_bear || g_smc_liquidity_sweep_sell || (smc_sell_ok && smc_struct_sell_ok)) && sell_zone_ok && (!InpUseSMCStructures || smc_sell_ok || g_smc_liquidity_sweep_sell) && smc_struct_sell_ok && !opposing_poi_sell && (rsi > eff_rsi_overbought) && (adx > g_adx_threshold) && !is_spike_sell && !usd_corr_blocked_sell && micro_sell_ok && pa_sell_ok && pattern_confluence_sell && !is_news_volatility;
    string preflight_sell_fail = "";
    bool v15_sell_ready = ValidateEnvironmentV15(preflight_sell_fail);
 
@@ -2175,7 +2234,26 @@ bool CheckDailyDrawdown() {
    return ((g_start_equity - equity) >= g_start_equity * (InpMaxDailyLoss / 100.0));
 }
 
-bool CheckSpread() { return (SymbolInfoInteger(_Symbol, SYMBOL_SPREAD) <= g_max_spread); }
+//+---------------------------------------------------------------+
+//| [V15.30] Spread Máximo Adaptado según el Tipo de Activo       |
+//+---------------------------------------------------------------+
+int GetAdaptiveMaxSpread(int userMaxSpread) {
+   string sym = _Symbol;
+   StringToUpper(sym);
+   int eff = userMaxSpread;
+   if(StringFind(sym, "GOLD") >= 0 || StringFind(sym, "XAU") >= 0) { if(eff < 75) eff = 75; }
+   else if(StringFind(sym, "BTC") >= 0) { if(eff < 6000) eff = 6000; }
+   else if(StringFind(sym, "ETH") >= 0) { if(eff < 3000) eff = 3000; }
+   else if(StringFind(sym, "US30") >= 0 || StringFind(sym, "DJ") >= 0) { if(eff < 1200) eff = 1200; }
+   else if(StringFind(sym, "NAS") >= 0 || StringFind(sym, "USTEC") >= 0) { if(eff < 900) eff = 900; }
+   else if(StringFind(sym, "GER") >= 0 || StringFind(sym, "DAX") >= 0) { if(eff < 900) eff = 900; }
+   return eff;
+}
+
+bool CheckSpread() { 
+   int eff_spread = GetAdaptiveMaxSpread(g_max_spread);
+   return (SymbolInfoInteger(_Symbol, SYMBOL_SPREAD) <= eff_spread); 
+}
 
 bool IsNewBar() {
    datetime cur_bar = iTime(_Symbol, _Period, 0);
@@ -2342,7 +2420,12 @@ void UpdateDashboard() {
                                        (g_daily_closed_pnl >= 0 ? "+" : ""), g_daily_closed_pnl,
                                        (g_daily_floating_pnl >= 0 ? "+" : ""), g_daily_floating_pnl,
                                        InpMaxDailyLossUSD);
-   color pnl_today_clr = (g_daily_closed_pnl + g_daily_floating_pnl >= 0) ? clrLime : (g_daily_killswitch_active ? clrRed : clrOrange);
+   if(g_daily_killswitch_active) {
+      pnl_today_txt += " ⚠️ [PAUSADO POR KILLSWITCH]";
+   } else if(g_consecutive_cooldown_until > TimeCurrent()) {
+      pnl_today_txt += StringFormat(" ⏳ [DISYUNTOR %s]", TimeToString(g_consecutive_cooldown_until, TIME_MINUTES));
+   }
+   color pnl_today_clr = (g_daily_killswitch_active) ? clrRed : ((g_daily_closed_pnl + g_daily_floating_pnl >= 0) ? clrLime : clrOrange);
    DrawLabel("lbl_V15_Risk", "Riesgo Diario: " + pnl_today_txt, 20, y, pnl_today_clr, 10); y += 20;
 
    string rec_txt = StringFormat("Reconciliación: %d Pos. Sincronizadas | Parciales: %d | Disyuntor: %d/%d Losses",
@@ -2378,6 +2461,17 @@ void UpdateDashboard() {
    } else {
       ObjectDelete(0, "lbl_SMC_Structure");
    }
+
+   // [V15.30 GATILLO OPWENS & PATRON CARTISTA]
+   if(InpUseOpwensTriggers) {
+      string opw_txt = (g_last_detected_candle != CANDLE_NONE) ? g_opwens_candles.GetPatternName(g_last_detected_candle) : "Escaneando POI...";
+      DrawLabel("lbl_Opwens_Trigger", "Gatillo Opwens: " + opw_txt, 20, y, (g_last_detected_candle != CANDLE_NONE ? clrGold : clrSilver), 10); y += 20;
+   } else ObjectDelete(0, "lbl_Opwens_Trigger");
+
+   if(InpUseClassicPatterns) {
+      string pat_txt = (g_detected_classic_pattern.type != PATTERN_NONE) ? (g_detected_classic_pattern.name + (g_detected_classic_pattern.isBullish ? " [BUY]" : " [SELL]")) : "Buscando figuras...";
+      DrawLabel("lbl_Classic_Pattern", "Figura Módulo 2: " + pat_txt, 20, y, (g_detected_classic_pattern.type != PATTERN_NONE ? clrAqua : clrSilver), 10); y += 20;
+   } else ObjectDelete(0, "lbl_Classic_Pattern");
    
    bool disc_ok = (price > ma) ? IsInDiscountPremiumZone("BUY") : IsInDiscountPremiumZone("SELL");
    string disc_txt = (price > ma) ? (disc_ok ? "ZONA DESCUENTO (COMPRA OK)" : "ZONA PREMIUM (CARA - ESPERAR)")
@@ -2538,7 +2632,8 @@ void DrawLabel(string name, string text, int x, int y, color clr, int fontsize) 
    ObjectSetInteger(0, name, OBJPROP_COLOR, clr);
 }
 
-// [FIX #1 & V12.6] Permite re-entrada si la posición abierta previa ya tiene SL en Ganancia/BE
+// [FIX #1 & V15.35] El bot opera de forma 100% independiente de las operaciones manuales del usuario.
+// Solo consideramos posiciones generadas por el propio robot con su MAGIC_NUMBER.
 bool IsPositionOpenOnSymbol() {
    int count = 0;
    bool has_unprotected = false;
@@ -2547,7 +2642,11 @@ bool IsPositionOpenOnSymbol() {
       if(!PositionSelectByTicket(ticket)) continue;
       if(PositionGetString(POSITION_SYMBOL) != _Symbol) continue;
       long magic = PositionGetInteger(POSITION_MAGIC);
-      if(magic != MAGIC_NUMBER && (!InpManageManualTrades || !InpBlockAutoWhenManualOpen)) continue;
+      
+      // Si la posición es manual o de otro EA, no bloquea al bot a menos que InpBlockAutoWhenManualOpen sea true
+      if(magic != MAGIC_NUMBER) {
+         if(!InpBlockAutoWhenManualOpen) continue; // Por defecto: Operaciones manuales NO bloquean al bot
+      }
       
       count++;
       double open_price = PositionGetDouble(POSITION_PRICE_OPEN);
@@ -2619,7 +2718,9 @@ bool HasUnprotectedCorrelatedUSDPosition(string symbol, string new_order_type, s
       if(!PositionSelectByTicket(ticket)) continue;
       
       long magic = PositionGetInteger(POSITION_MAGIC);
-      if(magic != MAGIC_NUMBER && (!InpManageManualTrades || !InpBlockAutoWhenManualOpen)) continue;
+      if(magic != MAGIC_NUMBER) {
+         if(!InpBlockAutoWhenManualOpen) continue; // Por defecto: Manuales en otros pares NO bloquean al bot
+      }
       
       string pos_sym = PositionGetString(POSITION_SYMBOL);
       if(pos_sym == symbol) continue; // Mismo símbolo ya lo gestiona IsPositionOpenOnSymbol

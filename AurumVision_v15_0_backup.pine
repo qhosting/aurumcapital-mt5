@@ -1,17 +1,14 @@
 //@version=5
-indicator("Aurum Vision [Institutional SMC & Classic Engine V15.35 Pro]", shorttitle="Aurum Vision V15.35 Pro", overlay=true, max_lines_count=500, max_labels_count=500, max_boxes_count=500)
+indicator("Aurum Vision [Institutional SMC & Risk Engine V15.0 Clean]", shorttitle="Aurum Vision V15 Pro", overlay=true, max_lines_count=500, max_labels_count=500, max_boxes_count=500)
 
 // ==============================================================================
-// 🦅 AURUM VISION V15.35 PRO — TRADINGVIEW INSTITUTIONAL & CLASSIC SCRIPT
-// Sincronizado al 100% con AurumSniper & AurumSniperMicro MT5 (V15.35 Institutional)
-// y con el módulo AurumClassicSniper (Patrones Clásicos + Gatillos Opwens).
-//
-// Innovaciones V15.35:
-//  - Motor Cuantitativo Opwens Mejorado con Insignias de Alta Visibilidad OPW-B / OPW-S.
-//  - Visualización directa del nombre de vela (Martillo, Engulfing, Estrella Mañana...).
-//  - Confluencia con Barridos de Liquidez (Sweeps) como POI de primer orden.
-//  - RSI Adaptativo dinámico y reversión en 1 barra.
-//  - Operativa continua 24h para Metales (Oro / Plata).
+// 🦅 AURUM VISION V15.0 PRO — TRADINGVIEW INSTITUTIONAL SCRIPT (CLEAN EDITION)
+// Sincronizado al 100% con AurumSniper & AurumSniperMicro MT5 (V15.0 Institutional)
+// Mejoras Clave:
+//  - Fondo limpio sin franjas invasivas (Killzone discreta en HUD y puntos de sesión).
+//  - POIs limpios: Cajas de OB, Breakers y FVGs acotadas (sin líneas infinitas).
+//  - Cazas de liquidez (Sweeps EQH/EQL) anti-spam (una sola alerta/etiqueta por swing).
+//  - Disparos Sniper limpios y Setup visual de alta definición.
 // ==============================================================================
 
 // ==================== DEFINICIÓN DE COLORES ====================
@@ -28,7 +25,7 @@ c_purple  = color.new(#B388FF, 0)
 c_blue    = color.new(#2979FF, 0)
 
 // ==================== INPUTS: SMART MONEY CONCEPTS (SMC) ====================
-grp_smc = "=== INSTITUTIONAL SMART MONEY CONCEPTS (SMC V15.30) ==="
+grp_smc = "=== INSTITUTIONAL SMART MONEY CONCEPTS (SMC V15.0) ==="
 inp_use_smc        = input.bool(true, "Activar Motor Institucional SMC", group=grp_smc)
 inp_swing_len      = input.int(5, "Longitud de Swing Pivots (Velas)", minval=2, maxval=20, group=grp_smc)
 inp_show_bos_choch = input.bool(true, "Dibujar Estructura (BOS / CHoCH Líneas)", group=grp_smc)
@@ -42,7 +39,7 @@ inp_ob_count       = input.int(4, "Máximo POIs Visibles en Pantalla (2 a 6)", m
 inp_strict_smc_align   = input.bool(true, "Alinear con Estructura SMC (Anti-CHoCH Contrario)", group=grp_smc, tooltip="Bloquea ventas si la estructura local está en Bullish CHoCH/BOS, y bloquea compras si está en Bearish CHoCH/BOS")
 inp_block_opposing_poi = input.bool(true, "Bloquear Disparo ante POI Opuesto Activo", group=grp_smc, tooltip="Bloquea ventas si el precio testea un Bullish OB o Breaker, y bloquea compras si testea un Bearish OB o Breaker")
 
-// Colores Institucionales
+// Colores Institucionales con Transparencia Limpia
 col_bull_ob  = input.color(color.new(#00E5FF, 86), "Color Bullish OB", group=grp_smc)
 col_bear_ob  = input.color(color.new(#FF1744, 86), "Color Bearish OB", group=grp_smc)
 col_bull_brk = input.color(color.new(#2979FF, 84), "Color Bullish Breaker", group=grp_smc)
@@ -51,20 +48,6 @@ col_fvg_bull = input.color(color.new(#00E676, 88), "Color Bullish FVG", group=gr
 col_fvg_bear = input.color(color.new(#FF5252, 88), "Color Bearish FVG", group=grp_smc)
 col_bos_bull = input.color(color.new(#00E5FF, 0), "Color Estructura Alcista (BOS/CHoCH)", group=grp_smc)
 col_bos_bear = input.color(color.new(#FF1744, 0), "Color Estructura Bajista (BOS/CHoCH)", group=grp_smc)
-
-// ==================== INPUTS: GATILLOS DE VELAS OPWENS (14 PATRONES) ====================
-grp_opwens = "=== GATILLOS DE VELAS OPWENS (LIBRO OPWENS A4) ==="
-inp_use_opwens         = input.bool(true, "Activar Motor Cuantitativo Opwens", group=grp_opwens)
-inp_show_opwens_labels = input.bool(true, "Mostrar Etiquetas de Gatillos Opwens en Gráfico", group=grp_opwens)
-inp_opwens_filter_poi  = input.bool(true, "Filtrar Gatillos Exclusivamente en POI (OB/Breaker/Sweep)", group=grp_opwens, tooltip="Recomendado: Mantiene el gráfico limpio, mostrando gatillos Opwens únicamente cuando el precio testea un Order Block, Breaker o tras un Sweep de liquidez")
-inp_opwens_show_name   = input.bool(false, "Mostrar Nombre Completo en Vela (Desactivado = Insignia Compacta OPW-B)", group=grp_opwens, tooltip="Si está activado, añade el nombre extendido de la vela debajo de la insignia")
-
-// ==================== INPUTS: PATRONES CHARTISTAS CLÁSICOS (MÓDULO 2) ====================
-grp_classic = "=== PATRONES CHARTISTAS CLÁSICOS (MÓDULO 2 BLUEPRINT) ==="
-inp_use_classic_patterns     = input.bool(true, "Activar Detección de Patrones Clásicos", group=grp_classic)
-inp_show_patterns            = input.bool(true, "Dibujar Proyección H y Figuras en Pantalla", group=grp_classic)
-inp_require_pattern_confluence = input.bool(false, "Exigir Confluencia de Patrón para Disparo Sniper", group=grp_classic, tooltip="Si está activo, solo dispara si hay un patrón clásico vigente alineado")
-inp_pattern_tolerance        = input.float(0.06, "Tolerancia de Simetría / Ejes (%)", minval=0.01, maxval=0.15, step=0.01, group=grp_classic)
 
 // ==================== INPUTS: ESTRATEGIA & FILTROS ====================
 grp_strat = "=== TENDENCIA & FILTROS DE ENTRADA ==="
@@ -163,7 +146,7 @@ else if in_london
     sess_activa     := "🇬🇧 LONDRES KILLZONE"
     sess_activa_col := c_purple
 
-// Fondo opcional
+// Fondo opcional (por defecto na para un gráfico 100% limpio)
 color session_bg_color = na
 if inp_show_sessions
     if in_overlap
@@ -235,25 +218,12 @@ var bool  swingLowBreached  = false
 var int   smc_bias          = 0 // 1: Alcista, -1: Bajista
 var string market_structure = "CONSOLIDACIÓN"
 
-// Registro histórico de Swings para Patrones Clásicos
-var float sh1 = na, var float sh2 = na, var float sh3 = na
-var int   sh1_bar = na, var int   sh2_bar = na, var int   sh3_bar = na
-var float sl1 = na, var float sl2 = na, var float sl3 = na
-var int   sl1_bar = na, var int   sl2_bar = na, var int   sl3_bar = na
-
 // Barreras anti-duplicación para Sweeps
 var int   last_eqh_sweep_bar = na
 var int   last_eql_sweep_bar = na
 
 // 1. Piscinas de Liquidez (EQH / EQL - Motor SMC.txt)
 if not na(isSwingHigh)
-    sh3 := sh2
-    sh3_bar := sh2_bar
-    sh2 := sh1
-    sh2_bar := sh1_bar
-    sh1 := isSwingHigh
-    sh1_bar := bar_index - inp_swing_len
-
     if inp_use_smc and inp_show_eqhl and not na(lastSwingHigh)
         if math.abs(lastSwingHigh - isSwingHigh) < (atr * 0.18)
             line.new(lastSwingHighBar, lastSwingHigh, bar_index - inp_swing_len, isSwingHigh, color=col_bos_bear, style=line.style_dotted, width=1)
@@ -264,13 +234,6 @@ if not na(isSwingHigh)
     swingHighBreached := false
 
 if not na(isSwingLow)
-    sl3 := sl2
-    sl3_bar := sl2_bar
-    sl2 := sl1
-    sl2_bar := sl1_bar
-    sl1 := isSwingLow
-    sl1_bar := bar_index - inp_swing_len
-
     if inp_use_smc and inp_show_eqhl and not na(lastSwingLow)
         if math.abs(lastSwingLow - isSwingLow) < (atr * 0.18)
             line.new(lastSwingLowBar, lastSwingLow, bar_index - inp_swing_len, isSwingLow, color=col_bos_bull, style=line.style_dotted, width=1)
@@ -342,11 +305,12 @@ if inp_use_smc and inp_show_ob
                 array.push(orderblocks, Orderblock.new(newBox, high[i], low[i], bar_index - i, false, false, false, false))
                 break
 
-// 4. Breakers, Inversión de Polaridad y Chop Control
+// 4. Breakers, Inversión de Polaridad y Chop Control (Motor OB.txt)
 if inp_use_smc and array.size(orderblocks) > 0
     for i = array.size(orderblocks) - 1 to 0
         ob = array.get(orderblocks, i)
         if not ob.isMitigated
+            // Si el precio lo atraviesa
             if ob.isBullish and close < ob.bottom
                 if inp_show_breakers and not ob.isBreaker
                     ob.isBreaker := true
@@ -376,6 +340,7 @@ if inp_use_smc and array.size(orderblocks) > 0
                     box.set_right(ob.boxObj, bar_index)
                     array.set(orderblocks, i, ob)
             else if inp_chop_control and ob.isBreaker
+                // Chop Control de OB.txt: eliminar breakers si el precio vuelve a atravesar en falso
                 bool shouldRemove = false
                 if ob.wasOriginallyBullish and close > ob.top
                     shouldRemove := true
@@ -386,14 +351,15 @@ if inp_use_smc and array.size(orderblocks) > 0
                     array.remove(orderblocks, i)
                     continue
             else
+                // Extender suavemente la caja mientras sigue viva
                 box.set_right(ob.boxObj, bar_index + 10)
 
-// Limitar cantidad de OBs en pantalla
+// Limitar cantidad de OBs en pantalla a solo los más recientes y relevantes
 while array.size(orderblocks) > inp_ob_count
     old_ob = array.shift(orderblocks)
     box.delete(old_ob.boxObj)
 
-// 5. Fair Value Gaps (FVG)
+// 5. Fair Value Gaps (FVG) Limpios con Etiquetas (Motor SMC.txt)
 bool is_bull_fvg = (low > high[2]) and inp_use_smc and inp_show_fvg
 bool is_bear_fvg = (high < low[2]) and inp_use_smc and inp_show_fvg
 
@@ -405,10 +371,12 @@ if is_bear_fvg
     box_fvg = box.new(bar_index - 1, low[2], bar_index + 10, high, border_color=color.new(#FF5252, 50), bgcolor=col_fvg_bear, border_style=line.style_dashed, text="-FVG", text_size=size.tiny, text_color=color.white, extend=extend.none)
     array.push(fvgBoxes, FvgBox.new(box_fvg, low[2], high, false, false))
 
+// Mitigación de FVG
 if array.size(fvgBoxes) > 0
     for i = array.size(fvgBoxes) - 1 to 0
         fvg = array.get(fvgBoxes, i)
         if not fvg.isMitigated
+            // Mitigado si el precio cierra dentro o lo llena
             if fvg.isBullish and low <= fvg.bottom
                 fvg.isMitigated := true
                 box.set_right(fvg.boxObj, bar_index)
@@ -424,20 +392,18 @@ while array.size(fvgBoxes) > 3
     old_fvg = array.shift(fvgBoxes)
     box.delete(old_fvg.boxObj)
 
-// 6. Piscinas de Liquidez y Cazas de Stops (EQH / EQL Sweeps)
+// 6. Piscinas de Liquidez y Cazas de Stops (EQH / EQL Sweeps) - SIN REPETICIÓN
 bool eqh_sweep = false
 bool eql_sweep = false
 
 if inp_use_smc and inp_show_eqhl and not na(lastSwingHigh) and not na(lastSwingLow)
+    // Solo disparar UNA vez por cada evento de toma de liquidez
     if high > lastSwingHigh and close <= lastSwingHigh and (na(last_eqh_sweep_bar) or (bar_index - last_eqh_sweep_bar > 8))
         eqh_sweep := true
         last_eqh_sweep_bar := bar_index
     if low < lastSwingLow and close >= lastSwingLow and (na(last_eql_sweep_bar) or (bar_index - last_eql_sweep_bar > 8))
         eql_sweep := true
         last_eql_sweep_bar := bar_index
-
-bool is_sweep_low  = eql_sweep
-bool is_sweep_high = eqh_sweep
 
 plotshape(eql_sweep, "Barrido EQL (Liquidity Sweep)", shape.labelup, location.belowbar, c_lime, text="SWEEP", textcolor=c_black, size=size.tiny)
 plotshape(eqh_sweep, "Barrido EQH (Liquidity Sweep)", shape.labeldown, location.abovebar, c_red, text="SWEEP", textcolor=c_white, size=size.tiny)
@@ -447,8 +413,8 @@ h1_high_range = ta.highest(high, 40)
 h1_low_range  = ta.lowest(low, 40)
 eq_level      = (h1_high_range + h1_low_range) * 0.5
 
-bool in_discount = close <= eq_level
-bool in_premium  = close >= eq_level
+bool in_discount = close <= eq_level // Barato -> Compras
+bool in_premium  = close >= eq_level // Caro   -> Ventas
 
 plot(inp_show_pdz ? eq_level : na, "Equilibrio (50%)", color=color.new(c_gold, 60), style=plot.style_linebr, linewidth=1)
 
@@ -476,198 +442,13 @@ if array.size(orderblocks) > 0
 bool smc_buy_zone  = at_bull_ob or at_bull_breaker or eql_sweep
 bool smc_sell_zone = at_bear_ob or at_bear_breaker or eqh_sweep
 
-bool smc_struct_buy_ok    = not inp_use_smc or not inp_strict_smc_align or (smc_bias != -1)
-bool smc_struct_sell_ok   = not inp_use_smc or not inp_strict_smc_align or (smc_bias != 1)
+// [V15.10] Filtros de Protección Estructural SMC y POIs Opuestos
+bool smc_struct_buy_ok    = not inp_use_smc or not inp_strict_smc_align or (smc_bias != -1) // Prohibido comprar si hay quiebre bajista (Bearish CHoCH/BOS)
+bool smc_struct_sell_ok   = not inp_use_smc or not inp_strict_smc_align or (smc_bias != 1)  // Prohibido vender si hay quiebre alcista (Bullish CHoCH/BOS)
 bool no_opposing_poi_buy  = not inp_use_smc or not inp_block_opposing_poi or (not at_bear_ob and not at_bear_breaker)
 bool no_opposing_poi_sell = not inp_use_smc or not inp_block_opposing_poi or (not at_bull_ob and not at_bull_breaker)
 
-// ==================== MOTOR DE VELAS OPWENS (LIBRO OPWENS A4) ====================
-// Métricas para reconocimiento de velas de 1, 2 y 3 barras
-rng0 = high - low
-rng1 = high[1] - low[1]
-rng2 = high[2] - low[2]
-bdy0 = math.abs(close - open)
-bdy1 = math.abs(close[1] - open[1])
-bdy2 = math.abs(close[2] - open[2])
-uw0  = high - math.max(open, close)
-lw0  = math.min(open, close) - low
-uw1  = high[1] - math.max(open[1], close[1])
-lw1  = math.min(open[1], close[1]) - low[1]
-
-// 1. Martillo (Hammer) - Rechazo alcista con mecha inferior prominente >= 55% y cuerpo pequeño
-opwens_hammer = rng0 > 0 and (lw0 / rng0 >= 0.55) and (bdy0 / rng0 <= 0.35) and (uw0 / rng0 <= 0.20)
-// 2. Hombre Colgado (Hanging Man) - Giro bajista tras rally alcista previo
-opwens_hanging_man = rng0 > 0 and (lw0 / rng0 >= 0.55) and (bdy0 / rng0 <= 0.35) and (uw0 / rng0 <= 0.20) and (high >= ta.highest(high, 8)[1])
-// 3. Martillo Invertido (Inverted Hammer) - Giro alcista con mecha superior >= 55% tras caída
-opwens_inv_hammer = rng0 > 0 and (uw0 / rng0 >= 0.55) and (bdy0 / rng0 <= 0.35) and (lw0 / rng0 <= 0.20) and (low <= ta.lowest(low, 8)[1])
-// 4. Estrella Fugaz (Shooting Star) - Giro bajista con mecha superior >= 55% en techo
-opwens_shooting_star = rng0 > 0 and (uw0 / rng0 >= 0.55) and (bdy0 / rng0 <= 0.35) and (lw0 / rng0 <= 0.20) and (high >= ta.highest(high, 8)[1])
-// 5. Envolvente Alcista (Bullish Engulfing) - Cuerpo expansivo que supera claramente al previo
-opwens_bull_engulf = (close[1] < open[1]) and (close > open) and (close > open[1]) and (open <= close[1]) and (bdy0 > bdy1 * 1.20)
-// 6. Envolvente Bajista (Bearish Engulfing) - Cuerpo expansivo bajista que envuelve al previo
-opwens_bear_engulf = (close[1] > open[1]) and (close < open) and (close < open[1]) and (open >= close[1]) and (bdy0 > bdy1 * 1.20)
-// 7. Pauta Penetrante (Piercing Line) - Cierra arriba del 50% de vela bajista previa
-opwens_piercing = (close[1] < open[1]) and (close > open) and (close > (open[1] + close[1]) * 0.5) and (close <= open[1])
-// 8. Cubierta de Nube Oscura (Dark Cloud Cover) - Cierra bajo el 50% de vela alcista previa
-opwens_dark_cloud = (close[1] > open[1]) and (close < open) and (close < (open[1] + close[1]) * 0.5) and (close >= open[1])
-// 9. Estrella de la Mañana (Morning Star) - Reversión de 3 velas tras mínimo
-opwens_morning_star = (close[2] < open[2]) and (bdy1 < bdy2 * 0.35) and (close > open) and (close > (open[2] + close[2]) * 0.5)
-// 10. Estrella de la Noche (Evening Star) - Reversión de 3 velas tras máximo
-opwens_evening_star = (close[2] > open[2]) and (bdy1 < bdy2 * 0.35) and (close < open) and (close < (open[2] + close[2]) * 0.5)
-// 11. Pinzas Suelo (Tweezers Bottom) - Mínimos coincidentes milimétricos en soporte
-opwens_tweezers_bottom = (math.abs(low - low[1]) <= (rng0 * 0.08)) and (close > open) and (lw0 > bdy0 * 0.45)
-// 12. Pinzas Techo (Tweezers Top) - Máximos coincidentes milimétricos en techo
-opwens_tweezers_top = (math.abs(high - high[1]) <= (rng0 * 0.08)) and (close < open) and (uw0 > bdy0 * 0.45)
-// 13. Tres Soldados Blancos (Three White Soldiers) - En zona de rebote
-opwens_three_soldiers = (close > open) and (close[1] > open[1]) and (close[2] > open[2]) and (close > close[1]) and (close[1] > close[2]) and (low[2] <= ta.lowest(low, 8)[3])
-// 14. Tres Cuervos Negros (Three Black Crows) - En zona de techo
-opwens_three_crows = (close < open) and (close[1] < open[1]) and (close[2] < open[2]) and (close < close[1]) and (close[1] < close[2]) and (high[2] >= ta.highest(high, 8)[3])
-// 15. Tres Velas Interiores Alcista (Three Inside Up)
-opwens_three_inside_up = (close[2] < open[2]) and (close[1] > open[1]) and (close > close[1]) and (close > open[2])
-// 16. Tres Velas Interiores Bajista (Three Inside Down)
-opwens_three_inside_down = (close[2] > open[2]) and (close[1] < open[1]) and (close < close[1]) and (close < open[2])
-
-// Conjunción de Gatillos Opwens
-bool opwens_bull_any = opwens_hammer or opwens_inv_hammer or opwens_bull_engulf or opwens_piercing or opwens_morning_star or opwens_tweezers_bottom or opwens_three_soldiers or opwens_three_inside_up
-bool opwens_bear_any = opwens_hanging_man or opwens_shooting_star or opwens_bear_engulf or opwens_dark_cloud or opwens_evening_star or opwens_tweezers_top or opwens_three_crows or opwens_three_inside_down
-
-string opwens_bull_name = opwens_bull_engulf ? "ENGULFING ALCISTA" : opwens_morning_star ? "ESTRELLA MAÑANA" : opwens_hammer ? "MARTILLO" : opwens_inv_hammer ? "MARTILLO INV." : opwens_piercing ? "PAUTA PENETRANTE" : opwens_tweezers_bottom ? "PINZAS SUELO" : opwens_three_soldiers ? "3 SOLDADOS" : opwens_three_inside_up ? "3 INSIDE UP" : "NINGUNO"
-string opwens_bear_name = opwens_bear_engulf ? "ENGULFING BAJISTA" : opwens_evening_star ? "ESTRELLA NOCHE" : opwens_shooting_star ? "ESTRELLA FUGAZ" : opwens_hanging_man ? "HOMBRE COLGADO" : opwens_dark_cloud ? "NUBE OSCURA" : opwens_tweezers_top ? "PINZAS TECHO" : opwens_three_crows ? "3 CUERVOS" : opwens_three_inside_down ? "3 INSIDE DOWN" : "NINGUNO"
-
-// Gráficos de Gatillos Opwens en Pantalla: Filtrado estricto por POI institucional para mantener el gráfico impecable
-bool plot_opw_bull = inp_use_opwens and inp_show_opwens_labels and opwens_bull_any and (not inp_opwens_filter_poi or smc_buy_zone)
-bool plot_opw_bear = inp_use_opwens and inp_show_opwens_labels and opwens_bear_any and (not inp_opwens_filter_poi or smc_sell_zone)
-
-// Si el usuario activa opcionalmente el nombre extendido en la configuración:
-if plot_opw_bull and inp_opwens_show_name
-    label.new(bar_index, low, opwens_bull_name, color=color.new(#00E676, 10), textcolor=color.black, style=label.style_label_up, size=size.tiny)
-
-if plot_opw_bear and inp_opwens_show_name
-    label.new(bar_index, high, opwens_bear_name, color=color.new(#FF1744, 10), textcolor=color.white, style=label.style_label_down, size=size.tiny)
-
-// Insignias compactas y limpias tipo píldora (OPW-B / OPW-S) de alta visibilidad institucional
-plotshape(plot_opw_bull and not inp_opwens_show_name, "Gatillo Opwens Alcista (OPW-B)", shape.labelup, location.belowbar, color=color.new(#00E676, 0), text="OPW-B", textcolor=color.black, size=size.tiny)
-plotshape(plot_opw_bear and not inp_opwens_show_name, "Gatillo Opwens Bajista (OPW-S)", shape.labeldown, location.abovebar, color=color.new(#FF1744, 0), text="OPW-S", textcolor=color.white, size=size.tiny)
-
-// ==================== MOTOR DE PATRONES CARTISTAS CLÁSICOS (MÓDULO 2) ====================
-var string active_pattern_name   = "NINGUNO"
-var float  active_pattern_target = na
-var float  active_pattern_sl     = na
-var int    active_pattern_bar    = na
-var bool   pattern_bull_active   = false
-var bool   pattern_bear_active   = false
-
-// 1. Doble Suelo (Double Bottom / W)
-bool is_double_bottom = false
-if not na(sl1) and not na(sl2) and not na(sh1)
-    float base_low = math.min(sl1, sl2)
-    float neck_w   = sh1
-    float diff_w   = math.abs(sl1 - sl2)
-    if diff_w <= (neck_w * inp_pattern_tolerance) and (neck_w > base_low)
-        if close > neck_w and close[1] <= neck_w and (bar_index - sl1_bar < 50)
-            is_double_bottom := true
-            active_pattern_name   := "DOBLE SUELO (W)"
-            float h_proj = neck_w - base_low
-            active_pattern_target := neck_w + h_proj
-            active_pattern_sl     := base_low
-            active_pattern_bar    := bar_index
-            pattern_bull_active   := true
-            pattern_bear_active   := false
-
-// 2. Doble Techo (Double Top / M)
-bool is_double_top = false
-if not na(sh1) and not na(sh2) and not na(sl1)
-    float base_high = math.max(sh1, sh2)
-    float neck_m    = sl1
-    float diff_m    = math.abs(sh1 - sh2)
-    if diff_m <= (base_high * inp_pattern_tolerance) and (base_high > neck_m)
-        if close < neck_m and close[1] >= neck_m and (bar_index - sh1_bar < 50)
-            is_double_top := true
-            active_pattern_name   := "DOBLE TECHO (M)"
-            float h_proj = base_high - neck_m
-            active_pattern_target := neck_m - h_proj
-            active_pattern_sl     := base_high
-            active_pattern_bar    := bar_index
-            pattern_bear_active   := true
-            pattern_bull_active   := false
-
-// 3. Hombro-Cabeza-Hombro Invertido (Inverse H&S)
-bool is_inv_hch = false
-if not na(sl1) and not na(sl2) and not na(sl3) and not na(sh1)
-    if (sl2 < sl3) and (sl2 < sl1) and (math.abs(sl3 - sl1) <= (sh1 * inp_pattern_tolerance))
-        if close > sh1 and close[1] <= sh1 and (bar_index - sl2_bar < 60)
-            is_inv_hch := true
-            active_pattern_name   := "HCH INVERTIDO"
-            float h_proj = sh1 - sl2
-            active_pattern_target := sh1 + h_proj
-            active_pattern_sl     := sl1
-            active_pattern_bar    := bar_index
-            pattern_bull_active   := true
-            pattern_bear_active   := false
-
-// 4. Hombro-Cabeza-Hombro (Head & Shoulders)
-bool is_hch = false
-if not na(sh1) and not na(sh2) and not na(sh3) and not na(sl1)
-    if (sh2 > sh3) and (sh2 > sh1) and (math.abs(sh3 - sh1) <= (sh2 * inp_pattern_tolerance))
-        if close < sl1 and close[1] >= sl1 and (bar_index - sh2_bar < 60)
-            is_hch := true
-            active_pattern_name   := "HCH TECHO"
-            float h_proj = sh2 - sl1
-            active_pattern_target := sl1 - h_proj
-            active_pattern_sl     := sh1
-            active_pattern_bar    := bar_index
-            pattern_bear_active   := true
-            pattern_bull_active   := false
-
-// 5. Bandera Alcista / Bajista de Continuación (Flag / Pennant)
-bool is_bull_flag = false
-bool is_bear_flag = false
-if not na(sh1) and not na(sl1) and not na(sh2) and not na(sl2)
-    // Bandera Alcista: Impulso previo fuerte seguido de consolidación descendente leve
-    float mastil_bull = sh2 - sl2
-    if mastil_bull > (atr * 3.0) and (sh1 < sh2) and (sl1 > sl2) and (close > sh1) and (close[1] <= sh1)
-        is_bull_flag := true
-        active_pattern_name   := "BANDERA ALCISTA"
-        active_pattern_target := close + (mastil_bull * 0.70)
-        active_pattern_sl     := sl1
-        active_pattern_bar    := bar_index
-        pattern_bull_active   := true
-        pattern_bear_active   := false
-    
-    // Bandera Bajista: Impulso previo fuerte bajista seguido de consolidación ascendente leve
-    float mastil_bear = sh2 - sl2
-    if mastil_bear > (atr * 3.0) and (sh1 < sh2) and (sl1 > sl2) and (close < sl1) and (close[1] >= sl1)
-        is_bear_flag := true
-        active_pattern_name   := "BANDERA BAJISTA"
-        active_pattern_target := close - (mastil_bear * 0.70)
-        active_pattern_sl     := sh1
-        active_pattern_bar    := bar_index
-        pattern_bear_active   := true
-        pattern_bull_active   := false
-
-// Expiración o cumplimiento de patrones clásicos (después de 20 barras o si toca target)
-if not na(active_pattern_bar) and (bar_index - active_pattern_bar > 20)
-    pattern_bull_active := false
-    pattern_bear_active := false
-    active_pattern_name := "NINGUNO"
-
-// Dibujar Proyección H del Patrón Clásico
-var line ln_pat_h  = na
-var line ln_pat_sl = na
-var label lbl_pat  = na
-
-if inp_use_classic_patterns and inp_show_patterns and (is_double_bottom or is_double_top or is_inv_hch or is_hch or is_bull_flag or is_bear_flag)
-    line.delete(ln_pat_h)
-    line.delete(ln_pat_sl)
-    label.delete(lbl_pat)
-    
-    color pat_col = pattern_bull_active ? c_lime : c_red
-    ln_pat_h  := line.new(bar_index, active_pattern_target, bar_index + 15, active_pattern_target, color=c_gold, style=line.style_dashed, width=2)
-    ln_pat_sl := line.new(bar_index, active_pattern_sl, bar_index + 15, active_pattern_sl, color=c_red, style=line.style_dotted, width=1)
-    string pat_txt = "🎯 PROYECCIÓN H (" + active_pattern_name + "): " + str.tostring(active_pattern_target, "#.##")
-    lbl_pat := label.new(bar_index + 15, active_pattern_target, pat_txt, color=color.new(c_black, 20), textcolor=c_gold, style=label.style_label_left, size=size.tiny)
-
-// ==================== ACCIÓN DEL PRECIO: ABSORCIÓN & CONFIRMACIÓN V15.30 ====================
+// ==================== ACCIÓN DEL PRECIO & ABSORCIÓN ====================
 candle_range = high[1] - low[1]
 lower_wick = math.min(open[1], close[1]) - low[1]
 upper_wick = high[1] - math.max(open[1], close[1])
@@ -680,27 +461,19 @@ if inp_use_pa_filter and candle_range > 0
     bool bear_close  = (close[1] < open[1])
     bool bull_pinbar = (lower_wick / candle_range) >= inp_min_wick_ratio
     bool bear_pinbar = (upper_wick / candle_range) >= inp_min_wick_ratio
-    
-    // Confluencia Opwens: Si está activo, cualquier vela Opwens alcista/bajista en barra [0] o [1] valida el giro
-    bool opwens_b_valid = not inp_use_opwens or opwens_bull_any or opwens_bull_any[1]
-    bool opwens_s_valid = not inp_use_opwens or opwens_bear_any or opwens_bear_any[1]
-    
-    pa_buy_ok  := (bull_close or bull_pinbar or opwens_bull_any) and opwens_b_valid
-    pa_sell_ok := (bear_close or bear_pinbar or opwens_bear_any) and opwens_s_valid
-
-// Confluencia de Patrón Clásico para el disparo
-bool pattern_buy_ok  = not inp_use_classic_patterns or not inp_require_pattern_confluence or pattern_bull_active
-bool pattern_sell_ok = not inp_use_classic_patterns or not inp_require_pattern_confluence or pattern_bear_active
+    pa_buy_ok  := bull_close or bull_pinbar
+    pa_sell_ok := bear_close or bear_pinbar
 
 // Filtro Anti-Spike
 body = math.abs(close - open)
 avg_body = ta.sma(body, 10)
 is_spike = body[1] > (avg_body * 3.0)
 
-// ==================== DISPAROS SNIPER V15.30 INSTITUTIONAL ====================
-long_cond_raw  = (trend_bull or is_sweep_low or at_bull_ob) and in_discount and (smc_buy_zone or is_sweep_low or not inp_use_smc) and smc_struct_buy_ok and no_opposing_poi_buy and rsi < (is_sweep_low or at_bull_ob ? 48.0 : rsi_os) and adx > adx_min and not is_spike and pa_buy_ok and pattern_buy_ok and not is_extreme_news_volatility and (in_killzone or is_gold_asset)
-short_cond_raw = (trend_bear or is_sweep_high or at_bear_ob) and in_premium  and (smc_sell_zone or is_sweep_high or not inp_use_smc) and smc_struct_sell_ok and no_opposing_poi_sell and rsi > (is_sweep_high or at_bear_ob ? 52.0 : rsi_ob) and adx > adx_min and not is_spike and pa_sell_ok and pattern_sell_ok and not is_extreme_news_volatility and (in_killzone or is_gold_asset)
+// ==================== DISPAROS SNIPER V15 INSTITUTIONAL ====================
+long_cond_raw  = trend_bull and in_discount and (smc_buy_zone or not inp_use_smc) and smc_struct_buy_ok and no_opposing_poi_buy and rsi < rsi_os and adx > adx_min and not is_spike and pa_buy_ok and not is_extreme_news_volatility and in_killzone
+short_cond_raw = trend_bear and in_premium  and (smc_sell_zone or not inp_use_smc) and smc_struct_sell_ok and no_opposing_poi_sell and rsi > rsi_ob and adx > adx_min and not is_spike and pa_sell_ok and not is_extreme_news_volatility and in_killzone
 
+// Evitar alertas duplicadas en velas consecutivas
 var int last_trade_bar = na
 bool cooldown_ok = na(last_trade_bar) or (bar_index - last_trade_bar > 4)
 
@@ -710,10 +483,10 @@ short_cond = short_cond_raw and cooldown_ok
 if long_cond or short_cond
     last_trade_bar := bar_index
 
-// Señales en Gráfico
+// Señales Limpias en Gráfico
 plot(h1_ema, "EMA 200 H1 Trend", color=trend_bull ? color.new(c_lime, 30) : color.new(c_red, 30), linewidth=2)
-plotshape(long_cond, "BUY SNIPER V15.30", shape.triangleup, location.belowbar, c_lime, size=size.small, text="BUY-V15")
-plotshape(short_cond, "SELL SNIPER V15.30", shape.triangledown, location.abovebar, c_red, size=size.small, text="SELL-V15")
+plotshape(long_cond, "BUY SNIPER V15", shape.triangleup, location.belowbar, c_lime, size=size.small, text="BUY-V15")
+plotshape(short_cond, "SELL SNIPER V15", shape.triangledown, location.abovebar, c_red, size=size.small, text="SELL-V15")
 
 // --- VISUALIZADOR DE SETUP ESCALONADO LIMPIO (TP1 / TP2 / SL) ---
 var line  ln_sl   = na
@@ -751,7 +524,7 @@ if long_cond or short_cond
     ln_tp2 := line.new(bar_index, tp2_price, bar_index + ext, tp2_price, color=c_lime, width=2)
     
     string ml_txt = inp_use_microlock ? ("\nMicro-Lock: " + str.tostring(ml_price, "#.##")) : ""
-    string txt = (long_cond ? "BUY SNIPER V15.30" : "SELL SNIPER V15.30") +
+    string txt = (long_cond ? "BUY SNIPER V15" : "SELL SNIPER V15") +
                  "\nEntrada: " + str.tostring(en_price, "#.##") +
                  ml_txt +
                  "\nTP1 (+1R / BE): " + str.tostring(tp1_price, "#.##") +
@@ -759,12 +532,12 @@ if long_cond or short_cond
                  "\nSL (1R): " + str.tostring(sl_price, "#.##")
     lbl_setup := label.new(bar_index + ext, en_price, txt, color=color.new(c_black, 20), textcolor=sig_col, style=label.style_label_left, size=size.small)
 
-// ==================== DASHBOARD HUD EN TIEMPO REAL (V15.30 PRO) ====================
-var table dash = table.new(position.top_right, 2, 14, bgcolor = color.new(c_black, 20), border_width=1, border_color=color.new(c_gray, 60))
+// ==================== DASHBOARD HUD EN TIEMPO REAL ====================
+var table dash = table.new(position.top_right, 2, 12, bgcolor = color.new(c_black, 20), border_width=1, border_color=color.new(c_gray, 60))
 
 if barstate.islast and inp_show_hud
     table.cell(dash, 0, 0, "🦅 AURUM VISION", text_color=c_gold, text_size=size.normal)
-    table.cell(dash, 1, 0, "V15.30 PRO", text_color=c_white, text_size=size.normal)
+    table.cell(dash, 1, 0, "V15 INSTITUTIONAL", text_color=c_white, text_size=size.normal)
 
     // Fila 1: Sesión / Killzone
     table.cell(dash, 0, 1, "Killzone Activa", text_color=c_white)
@@ -775,67 +548,51 @@ if barstate.islast and inp_show_hud
     string struct_perm = smc_bias == 1 ? " [Solo BUY]" : smc_bias == -1 ? " [Solo SELL]" : ""
     table.cell(dash, 1, 2, market_structure + struct_perm, text_color= str.contains(market_structure, "BULLISH") ? c_lime : str.contains(market_structure, "BEARISH") ? c_red : c_gray)
 
-    // Fila 3: Rango Institucional
+    // Fila 3: Rango Premium / Descuento
     table.cell(dash, 0, 3, "Rango Institucional", text_color=c_white)
     table.cell(dash, 1, 3, in_discount ? "DESCUENTO (Comprar)" : "PREMIUM (Vender)", text_color= in_discount ? c_lime : c_red)
 
     // Fila 4: Confluencia SMC
     table.cell(dash, 0, 4, "Confluencia SMC", text_color=c_white)
-    string smc_info = at_bull_ob ? "BULLISH OB" : at_bear_ob ? "BEARISH OB" : is_sweep_low ? "SWEEP LIQUIDEZ (BUY)" : is_sweep_high ? "SWEEP LIQUIDEZ (SELL)" : at_bull_breaker ? "BULL BREAKER" : at_bear_breaker ? "BEAR BREAKER" : "SIN ZONA ACTIVA"
-    color smc_col   = (at_bull_ob or at_bull_breaker or is_sweep_low) ? c_lime : (at_bear_ob or at_bear_breaker or is_sweep_high) ? c_red : c_gray
+    string smc_info = at_bull_ob ? "BULLISH OB" : at_bear_ob ? "BEARISH OB" : at_bull_breaker ? "BULL BREAKER" : at_bear_breaker ? "BEAR BREAKER" : "SIN ZONA ACTIVA"
+    color smc_col   = (at_bull_ob or at_bull_breaker) ? c_lime : (at_bear_ob or at_bear_breaker) ? c_red : c_gray
     table.cell(dash, 1, 4, smc_info, text_color=smc_col)
 
-    // Fila 5: Gatillo Opwens (Libro Opwens)
-    table.cell(dash, 0, 5, "Gatillo Opwens", text_color=c_white)
-    string opw_txt = opwens_bull_any ? ("✅ " + opwens_bull_name) : opwens_bear_any ? ("🔻 " + opwens_bear_name) : "ESPERANDO GIRO"
-    color  opw_col = opwens_bull_any ? c_lime : opwens_bear_any ? c_red : c_gray
-    table.cell(dash, 1, 5, opw_txt, text_color=opw_col)
-
-    // Fila 6: Patrón Cartista Clásico (Módulo 2)
-    table.cell(dash, 0, 6, "Patrón Clásico (H)", text_color=c_white)
-    string pat_display = pattern_bull_active ? ("🎯 " + active_pattern_name) : pattern_bear_active ? ("🎯 " + active_pattern_name) : "SIN PATRÓN ACTIVO"
-    color  pat_display_col = pattern_bull_active ? c_lime : pattern_bear_active ? c_red : c_gray
-    table.cell(dash, 1, 6, pat_display, text_color=pat_display_col)
-
-    // Fila 7: RSI (M15)
-    table.cell(dash, 0, 7, "RSI (M15)", text_color=c_white)
+    // Fila 5: RSI (M15)
+    table.cell(dash, 0, 5, "RSI (M15)", text_color=c_white)
     color rsi_col = rsi < rsi_os ? c_lime : rsi > rsi_ob ? c_red : c_gray
-    table.cell(dash, 1, 7, str.tostring(rsi, "#.##"), text_color=rsi_col)
+    table.cell(dash, 1, 5, str.tostring(rsi, "#.##"), text_color=rsi_col)
 
-    // Fila 8: Tendencia H1 (EMA 200)
-    table.cell(dash, 0, 8, "Trend H1 (EMA 200)", text_color=c_white)
-    table.cell(dash, 1, 8, trend_bull ? "ALCISTA (BUY)" : "BAJISTA (SELL)", text_color= trend_bull ? c_lime : c_red)
+    // Fila 6: Tendencia H1 (EMA 200)
+    table.cell(dash, 0, 6, "Trend H1 (EMA 200)", text_color=c_white)
+    table.cell(dash, 1, 6, trend_bull ? "ALCISTA (BUY)" : "BAJISTA (SELL)", text_color= trend_bull ? c_lime : c_red)
 
-    // Fila 9: Filtro MTF (H4)
-    table.cell(dash, 0, 9, "Trend MTF (H4)", text_color=c_white)
+    // Fila 7: Filtro MTF (H4)
+    table.cell(dash, 0, 7, "Trend MTF (H4)", text_color=c_white)
     string mtf_txt = not inp_use_mtf ? "DESACTIVADO" : htf_bull ? "ALCISTA (✅)" : htf_bear ? "BAJISTA (✅)" : "CONFLICTO (❌)"
     color  mtf_col = not inp_use_mtf ? c_gray : htf_bull ? c_lime : htf_bear ? c_red : c_orange
-    table.cell(dash, 1, 9, mtf_txt, text_color=mtf_col)
+    table.cell(dash, 1, 7, mtf_txt, text_color=mtf_col)
 
-    // Fila 10: Acción del Precio
-    table.cell(dash, 0, 10, "Acción Precio (PA)", text_color=c_white)
-    table.cell(dash, 1, 10, pa_buy_ok or pa_sell_ok ? "✅ RECHAZO CONFIRMADO" : "⏳ ESPERANDO GIRO", text_color= pa_buy_ok or pa_sell_ok ? c_lime : c_orange)
+    // Fila 8: Acción del Precio
+    table.cell(dash, 0, 8, "Acción Precio (PA)", text_color=c_white)
+    table.cell(dash, 1, 8, pa_buy_ok or pa_sell_ok ? "✅ RECHAZO CONFIRMADO" : "⏳ ESPERANDO GIRO", text_color= pa_buy_ok or pa_sell_ok ? c_lime : c_orange)
 
-    // Fila 11: ADX Fuerza
-    table.cell(dash, 0, 11, "ADX Fuerza", text_color=c_white)
+    // Fila 9: ADX
+    table.cell(dash, 0, 9, "ADX Fuerza", text_color=c_white)
     bool adx_ok = adx > inp_adx_min
-    table.cell(dash, 1, 11, str.tostring(adx, "#.##") + (adx_ok ? " (ACTIVO)" : " (DORMIDO)"), text_color = adx_ok ? c_lime : c_orange)
+    table.cell(dash, 1, 9, str.tostring(adx, "#.##") + (adx_ok ? " (ACTIVO)" : " (DORMIDO)"), text_color = adx_ok ? c_lime : c_orange)
 
-    // Fila 12: Fases TP
-    table.cell(dash, 0, 12, "Fases de Salida", text_color=c_white)
-    table.cell(dash, 1, 12, "+" + str.tostring(inp_step1_r, "#.#") + "R (50%) ➔ +" + str.tostring(inp_step2_r, "#.#") + "R (40%)", text_color=c_gold)
+    // Fila 10: Fases TP
+    table.cell(dash, 0, 10, "Fases de Salida", text_color=c_white)
+    table.cell(dash, 1, 10, "+" + str.tostring(inp_step1_r, "#.#") + "R (50%) ➔ +" + str.tostring(inp_step2_r, "#.#") + "R (40%)", text_color=c_gold)
 
-    // Fila 13: Techo SL
-    table.cell(dash, 0, 13, "Gestión de SL", text_color=c_white)
-    table.cell(dash, 1, 13, is_gold_asset ? "$10 - $18 USD Capped" : "2.0x ATR Dinámico", text_color=c_cyan)
+    // Fila 11: Techo SL
+    table.cell(dash, 0, 11, "Gestión de SL", text_color=c_white)
+    table.cell(dash, 1, 11, is_gold_asset ? "$10 - $18 USD Capped" : "2.0x ATR Dinámico", text_color=c_cyan)
 
-// ==================== ALERTAS TRADINGVIEW (V15.30) ====================
-alertcondition(long_cond, title="🦅 AURUM COMPRA (BUY) V15.30", message="🦅 AURUM SNIPER BUY V15.30 en {{ticker}} @ {{close}} | SMC + Opwens + Patrón Clásico | TP1: +1.0R | TP2: +1.8R")
-alertcondition(short_cond, title="🦅 AURUM VENTA (SELL) V15.30", message="🦅 AURUM SNIPER SELL V15.30 en {{ticker}} @ {{close}} | SMC + Opwens + Patrón Clásico | TP1: +1.0R | TP2: +1.8R")
-alertcondition(opwens_bull_any, title="🕯️ GATILLO OPWENS ALCISTA", message="🕯️ Gatillo Opwens Alcista detectado en {{ticker}} @ {{close}}.")
-alertcondition(opwens_bear_any, title="🕯️ GATILLO OPWENS BAJISTA", message="🕯️ Gatillo Opwens Bajista detectado en {{ticker}} @ {{close}}.")
-alertcondition(is_double_bottom or is_inv_hch or is_bull_flag, title="🎯 RUPTURA PATRÓN CLÁSICO ALCISTA", message="🎯 Ruptura de Patrón Clásico Alcista con Proyección H en {{ticker}} @ {{close}}.")
-alertcondition(is_double_top or is_hch or is_bear_flag, title="🎯 RUPTURA PATRÓN CLÁSICO BAJISTA", message="🎯 Ruptura de Patrón Clásico Bajista con Proyección H en {{ticker}} @ {{close}}.")
+// ==================== ALERTAS TRADINGVIEW ====================
+alertcondition(long_cond, title="🦅 AURUM COMPRA (BUY) V15", message="🦅 AURUM SNIPER BUY V15 en {{ticker}} @ {{close}} | Zona: Descuento + SMC OB/Breaker | TP1: +1.0R (BE) | TP2: +1.8R")
+alertcondition(short_cond, title="🦅 AURUM VENTA (SELL) V15", message="🦅 AURUM SNIPER SELL V15 en {{ticker}} @ {{close}} | Zona: Premium + SMC OB/Breaker | TP1: +1.0R (BE) | TP2: +1.8R")
 alertcondition(eql_sweep, title="🪤 BARRIDO DE LIQUIDEZ EQL", message="🪤 Cazaron stops de compradores (EQL Sweep) en {{ticker}} @ {{close}}.")
 alertcondition(eqh_sweep, title="🪤 BARRIDO DE LIQUIDEZ EQH", message="🪤 Cazaron stops de vendedores (EQH Sweep) en {{ticker}} @ {{close}}.")
 alertcondition(at_bull_ob or at_bull_breaker, title="🧱 PRECIO EN BULLISH OB/BREAKER", message="Precio tocando soporte institucional en {{ticker}} @ {{close}}.")
