@@ -724,9 +724,9 @@ plotshape(short_cond, "SELL SNIPER V15.35", shape.triangledown, location.aboveba
 
 // Etiqueta con hora exacta de entrada en la vela
 if long_cond
-    label.new(bar_index, low - (atr * 0.3), "⏰ " + str.format_time(time, "HH:mm"), color=color.new(#00E676, 0), textcolor=color.black, style=label.style_label_up, size=size.tiny)
+    label.new(bar_index, low - (atr * 0.3), "⏰ " + str.format_time(time, "HH:mm", "America/Mexico_City") + " CDMX", color=color.new(#00E676, 0), textcolor=color.black, style=label.style_label_up, size=size.tiny)
 if short_cond
-    label.new(bar_index, high + (atr * 0.3), "⏰ " + str.format_time(time, "HH:mm"), color=color.new(#FF1744, 0), textcolor=color.white, style=label.style_label_down, size=size.tiny)
+    label.new(bar_index, high + (atr * 0.3), "⏰ " + str.format_time(time, "HH:mm", "America/Mexico_City") + " CDMX", color=color.new(#FF1744, 0), textcolor=color.white, style=label.style_label_down, size=size.tiny)
 
 // --- VISUALIZADOR DE SETUP ESCALONADO LIMPIO (TP1 / TP2 / SL) ---
 var line  ln_sl   = na
@@ -763,7 +763,7 @@ if long_cond or short_cond
     ln_tp1 := line.new(bar_index, tp1_price, bar_index + ext, tp1_price, color=c_gold, style=line.style_dashed, width=2)
     ln_tp2 := line.new(bar_index, tp2_price, bar_index + ext, tp2_price, color=c_lime, width=2)
     
-    string time_str = str.format_time(time, "HH:mm", "UTC") + " UTC (" + str.format_time(time, "HH:mm", syminfo.timezone) + " Local)"
+    string time_str = str.format_time(time, "HH:mm", "America/Mexico_City") + " CDMX (" + str.format_time(time, "HH:mm", "UTC") + " UTC)"
     string ml_txt = inp_use_microlock ? ("\nMicro-Lock: " + str.tostring(ml_price, "#.##")) : ""
     string txt = (long_cond ? "BUY SNIPER V15.35" : "SELL SNIPER V15.35") +
                  "\n⏰ Entrada: " + time_str +
@@ -855,7 +855,7 @@ if barstate.islast and inp_show_hud
         int mins       = total_mins % 60
         int bars_ago   = bar_index - last_trade_bar
         string dur_str = hours > 0 ? (str.tostring(hours) + "h " + str.tostring(mins) + "m") : (str.tostring(mins) + "m")
-        timing_str := last_trade_type + " [" + str.format_time(last_trade_time, "HH:mm", "UTC") + " UTC] · " + dur_str + " (" + str.tostring(bars_ago) + " v)"
+        timing_str := last_trade_type + " [" + str.format_time(last_trade_time, "HH:mm", "America/Mexico_City") + " CDMX] · " + dur_str + " (" + str.tostring(bars_ago) + " v)"
         timing_col := last_trade_type == "BUY" ? c_lime : c_red
     table.cell(dash, 1, 14, timing_str, text_color=timing_col)
 

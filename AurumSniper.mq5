@@ -2388,6 +2388,7 @@ void DrawPositionLevels() {
    DrawChartLine("tp_lvl_3", tp3, clrLime, STYLE_SOLID, 2, tp3_tt);
    
    // Nivel visual de Entrada con Hora y Duración en Mercado
+   datetime pos_time_cdmx = pos_time + (TimeLocal() - TimeCurrent());
    int elapsed_sec = (int)(TimeCurrent() - pos_time);
    int elapsed_hr  = elapsed_sec / 3600;
    int elapsed_min = (elapsed_sec % 3600) / 60;
@@ -2395,11 +2396,11 @@ void DrawPositionLevels() {
    if(bars_held < 0) bars_held = 0;
    string dur_txt = (elapsed_hr > 0) ? StringFormat("%dh %02dm", elapsed_hr, elapsed_min) : StringFormat("%dm", elapsed_min);
    
-   string entry_tt = StringFormat("⏰ ENTRADA %s #%I64u @ %.5f [%s] | En Mercado: %s (%d velas %s)",
+   string entry_tt = StringFormat("⏰ ENTRADA %s #%I64u @ %.5f [%s CDMX] | En Mercado: %s (%d velas %s)",
                                   (type == POSITION_TYPE_BUY ? "BUY" : "SELL"),
                                   active_ticket,
                                   entry,
-                                  TimeToString(pos_time, TIME_MINUTES),
+                                  TimeToString(pos_time_cdmx, TIME_MINUTES),
                                   dur_txt,
                                   bars_held,
                                   EnumToString(_Period));
@@ -2408,7 +2409,7 @@ void DrawPositionLevels() {
    datetime bar0_time = iTime(_Symbol, _Period, 0);
    if(bar0_time == 0) bar0_time = TimeCurrent();
    
-   DrawChartText("tp_lvl_txt_entry", bar0_time, entry, StringFormat("  ⏰ %s [%s] | %s (%d velas)", (type == POSITION_TYPE_BUY ? "BUY" : "SELL"), TimeToString(pos_time, TIME_MINUTES), dur_txt, bars_held), clrWhite);
+   DrawChartText("tp_lvl_txt_entry", bar0_time, entry, StringFormat("  ⏰ %s [%s CDMX] | %s (%d velas)", (type == POSITION_TYPE_BUY ? "BUY" : "SELL"), TimeToString(pos_time_cdmx, TIME_MINUTES), dur_txt, bars_held), clrWhite);
    
    if(InpUseMicroLock05R) {
       DrawChartText("tp_lvl_txt05", bar0_time, tp05, StringFormat("  🔒 Micro-Lock (%.1fR/BE): ", InpMicroLock05Trigger) + DoubleToString(tp05, _Digits) + (profit_R >= InpMicroLock05Trigger ? " [ALCANZADO ✅]" : ""), clrOrange);
@@ -2611,14 +2612,15 @@ void UpdateDashboard() {
       
       DrawLabel("lbl_TradeHeader", "=== TRADE EN VIVO (" + (pos_type == POSITION_TYPE_BUY ? "BUY" : "SELL") + ") ===", 20, y, clrGold, 10); y += 18;
       
+      datetime pos_time_cdmx = pos_time + (TimeLocal() - TimeCurrent());
       int pos_elapsed_sec = (int)(TimeCurrent() - pos_time);
       int pos_elapsed_hr  = pos_elapsed_sec / 3600;
       int pos_elapsed_min = (pos_elapsed_sec % 3600) / 60;
       int pos_bars_held   = iBarShift(_Symbol, _Period, pos_time, false);
       if(pos_bars_held < 0) pos_bars_held = 0;
       string pos_dur_str  = (pos_elapsed_hr > 0) ? StringFormat("%dh %02dm", pos_elapsed_hr, pos_elapsed_min) : StringFormat("%dm", pos_elapsed_min);
-      string timing_lbl_txt = StringFormat("⏰ Entrada: %s | Mercado: %s (%d velas %s)",
-                                           TimeToString(pos_time, TIME_MINUTES),
+      string timing_lbl_txt = StringFormat("⏰ Entrada: %s CDMX | Mercado: %s (%d velas %s)",
+                                           TimeToString(pos_time_cdmx, TIME_MINUTES),
                                            pos_dur_str,
                                            pos_bars_held,
                                            EnumToString(_Period));
