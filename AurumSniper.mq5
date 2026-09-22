@@ -735,22 +735,30 @@ bool IsInSMCInstitutionalZone(string direction, double cur_price, bool &has_ob, 
    has_fvg = false;
    if(!InpUseSMCStructures) return true; // Si el motor esta apagado, permitir paso libre
    
-   double tolerance = 3.0 * _Point;
+   // [V15.35] Tolerancia adaptativa al ATR para Oro, Indices y Forex
+   double atr_ref = (hATR != INVALID_HANDLE && g_atr_cache > 0) ? g_atr_cache : (g_distancia_puntos * _Point);
+   double tolerance = MathMax(3.0 * _Point, atr_ref * 0.08);
+   
+   double low1  = iLow(_Symbol,  _Period, 1);
+   double high1 = iHigh(_Symbol, _Period, 1);
    
    // Evaluar Order Blocks y Breakers
    for(int b = g_total_obs - 1; b >= 0; b--) {
+      if(g_order_blocks[b].is_mitigated) continue; // Descartar bloques ya mitigados
+      
       double top = g_order_blocks[b].top + tolerance;
       double bot = g_order_blocks[b].bottom - tolerance;
       
       if(direction == "BUY" && g_order_blocks[b].is_bullish) {
-         if(cur_price >= bot && cur_price <= top) {
+         // Valida si el precio actual esta en zona O si la vela 1 testeo el bloque con su mecha/cuerpo
+         if((cur_price >= bot && cur_price <= top) || (low1 <= top && high1 >= bot)) {
             if(g_order_blocks[b].is_breaker) has_breaker = true;
             else                             has_ob = true;
             break;
          }
       }
       else if(direction == "SELL" && !g_order_blocks[b].is_bullish) {
-         if(cur_price >= bot && cur_price <= top) {
+         if((cur_price >= bot && cur_price <= top) || (high1 >= bot && low1 <= top)) {
             if(g_order_blocks[b].is_breaker) has_breaker = true;
             else                             has_ob = true;
             break;
@@ -760,13 +768,15 @@ bool IsInSMCInstitutionalZone(string direction, double cur_price, bool &has_ob, 
    
    // Evaluar Fair Value Gaps
    for(int f = g_total_fvgs - 1; f >= 0; f--) {
+      if(g_fvgs[f].is_mitigated) continue;
+      
       double top = g_fvgs[f].top + tolerance;
       double bot = g_fvgs[f].bottom - tolerance;
-      if(direction == "BUY" && g_fvgs[f].is_bullish && cur_price >= bot && cur_price <= top) {
+      if(direction == "BUY" && g_fvgs[f].is_bullish && ((cur_price >= bot && cur_price <= top) || (low1 <= top && high1 >= bot))) {
          has_fvg = true;
          break;
       }
-      else if(direction == "SELL" && !g_fvgs[f].is_bullish && cur_price >= bot && cur_price <= top) {
+      else if(direction == "SELL" && !g_fvgs[f].is_bullish && ((cur_price >= bot && cur_price <= top) || (high1 >= bot && low1 <= top))) {
          has_fvg = true;
          break;
       }
@@ -1510,12 +1520,6 @@ bool CheckMicroTrigger(string direction, string &micro_reason) {
    if(!InpUseMicroTrigger) return true;
    if(_Period <= InpMicroTriggerTimeframe) return true;
 
-   double micro_c1 = iClose(_Symbol, InpMicroTriggerTimeframe, 1);
-   double micro_o1 = iOpen(_Symbol,  InpMicroTriggerTimeframe, 1);
-   double micro_h1 = iHigh(_Symbol,  InpMicroTriggerTimeframe, 1);
-   double micro_l1 = iLow(_Symbol,   InpMicroTriggerTimeframe, 1);
-   double micro_range = micro_h1 - micro_l1;
-
    double ma_buf[];
    ArraySetAsSeries(ma_buf, true);
    double ma_val = 0;
@@ -1523,31 +1527,43 @@ bool CheckMicroTrigger(string direction, string &micro_reason) {
       ma_val = ma_buf[0];
    }
 
-   if(direction == "BUY") {
-      bool bull_close     = (micro_c1 > micro_o1);
-      bool above_ma       = (ma_val > 0) ? (micro_c1 >= ma_val) : true;
-      double lower_wick   = (micro_range > 0) ? ((MathMin(micro_o1, micro_c1) - micro_l1) / micro_range) : 0;
-      bool rejection_wick = (lower_wick >= 0.35);
+   // [V15.35] Ventana de confirmacion en ultimas 3 velas de M1 para evitar descartes por micro-ruido de 60 segundos
+   bool trigger_confirmed = false;
+   for(int k = 1; k <= 3; k++) {
+      double micro_c = iClose(_Symbol, InpMicroTriggerTimeframe, k);
+      double micro_o = iOpen(_Symbol,  InpMicroTriggerTimeframe, k);
+      double micro_h = iHigh(_Symbol,  InpMicroTriggerTimeframe, k);
+      double micro_l = iLow(_Symbol,   InpMicroTriggerTimeframe, k);
+      double micro_range = micro_h - micro_l;
 
-      // Exige giro real: (Vela verde Y sobre EMA) O (Fuerte mecha de absorción en soporte)
-      if(!((bull_close && above_ma) || rejection_wick)) {
-         micro_reason = "[Micro-Gatillo M1 Aún Cayendo sin Giro Confirmado]";
-         return false;
+      if(direction == "BUY") {
+         bool bull_close     = (micro_c > micro_o);
+         bool above_ma       = (ma_val > 0) ? (micro_c >= ma_val) : true;
+         double lower_wick   = (micro_range > 0) ? ((MathMin(micro_o, micro_c) - micro_l) / micro_range) : 0;
+         bool rejection_wick = (lower_wick >= 0.35);
+
+         if((bull_close && above_ma) || rejection_wick) {
+            trigger_confirmed = true;
+            break;
+         }
       }
-      return true;
+      else if(direction == "SELL") {
+         bool bear_close     = (micro_c < micro_o);
+         bool below_ma       = (ma_val > 0) ? (micro_c <= ma_val) : true;
+         double upper_wick   = (micro_range > 0) ? ((micro_h - MathMax(micro_o, micro_c)) / micro_range) : 0;
+         bool rejection_wick = (upper_wick >= 0.35);
+
+         if((bear_close && below_ma) || rejection_wick) {
+            trigger_confirmed = true;
+            break;
+         }
+      }
    }
-   else if(direction == "SELL") {
-      bool bear_close     = (micro_c1 < micro_o1);
-      bool below_ma       = (ma_val > 0) ? (micro_c1 <= ma_val) : true;
-      double upper_wick   = (micro_range > 0) ? ((micro_h1 - MathMax(micro_o1, micro_c1)) / micro_range) : 0;
-      bool rejection_wick = (upper_wick >= 0.35);
 
-      // Exige giro real: (Vela roja Y bajo EMA) O (Fuerte mecha de rechazo en resistencia)
-      if(!((bear_close && below_ma) || rejection_wick)) {
-         micro_reason = "[Micro-Gatillo M1 Aún Subiendo sin Giro Confirmado]";
-         return false;
-      }
-      return true;
+   if(!trigger_confirmed) {
+      micro_reason = (direction == "BUY") ? "[Micro-Gatillo M1 Aún Cayendo sin Giro en M1]" 
+                                          : "[Micro-Gatillo M1 Aún Subiendo sin Giro en M1]";
+      return false;
    }
    return true;
 }

@@ -707,8 +707,8 @@ avg_body = ta.sma(body, 10)
 is_spike = body[1] > (avg_body * 3.0)
 
 // ==================== DISPAROS SNIPER V15.30 INSTITUTIONAL ====================
-long_cond_raw  = (trend_bull or is_sweep_low or at_bull_ob) and in_discount and (smc_buy_zone or is_sweep_low or not inp_use_smc) and smc_struct_buy_ok and no_opposing_poi_buy and rsi < (is_sweep_low or at_bull_ob ? 48.0 : rsi_os) and adx > adx_min and not is_spike and pa_buy_ok and pattern_buy_ok and not is_extreme_news_volatility and (in_killzone or is_gold_asset)
-short_cond_raw = (trend_bear or is_sweep_high or at_bear_ob) and in_premium  and (smc_sell_zone or is_sweep_high or not inp_use_smc) and smc_struct_sell_ok and no_opposing_poi_sell and rsi > (is_sweep_high or at_bear_ob ? 52.0 : rsi_ob) and adx > adx_min and not is_spike and pa_sell_ok and pattern_sell_ok and not is_extreme_news_volatility and (in_killzone or is_gold_asset)
+long_cond_raw  = (trend_bull or is_sweep_low or at_bull_ob) and htf_bull and in_discount and (smc_buy_zone or is_sweep_low or not inp_use_smc) and smc_struct_buy_ok and no_opposing_poi_buy and rsi < (is_sweep_low or at_bull_ob ? 48.0 : rsi_os) and adx > adx_min and not is_spike and pa_buy_ok and pattern_buy_ok and not is_extreme_news_volatility and (in_killzone or is_gold_asset)
+short_cond_raw = (trend_bear or is_sweep_high or at_bear_ob) and htf_bear and in_premium  and (smc_sell_zone or is_sweep_high or not inp_use_smc) and smc_struct_sell_ok and no_opposing_poi_sell and rsi > (is_sweep_high or at_bear_ob ? 52.0 : rsi_ob) and adx > adx_min and not is_spike and pa_sell_ok and pattern_sell_ok and not is_extreme_news_volatility and (in_killzone or is_gold_asset)
 
 var int    last_trade_bar   = na
 var int    last_trade_time  = na
