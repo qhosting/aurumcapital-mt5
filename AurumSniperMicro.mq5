@@ -333,13 +333,15 @@ void AutoTuneAssets() {
    }
    if(InpAutoIndexSettings) {
       string symbol = _Symbol; StringToUpper(symbol);
-      if(StringFind(symbol,"US30") >= 0 || StringFind(symbol,"DJI") >= 0 || StringFind(symbol,"WS30") >= 0 || StringFind(symbol,"WALLSTREET") >= 0) {
+      if(StringFind(symbol,"US30") >= 0 || StringFind(symbol,"DJI") >= 0 || StringFind(symbol,"DJ30") >= 0 || StringFind(symbol,"WS30") >= 0 || StringFind(symbol,"WALLSTREET") >= 0) {
          g_max_spread = 1000; g_distancia_puntos = 800; g_be_trigger = 600;
          g_adx_threshold = 18; g_atr_multiplier = 2.0; g_risk_reward = InpRiskReward;
          g_rsi_oversold = 42; g_rsi_overbought = 60;
          g_momentum_spike_multiplier = 4.0;
          g_min_sl_price = 50.0; // Minimo 50 pts en US30
-         Print("AURUM INDEX V12.97 ACTIVE: US30 (Spread Max: 1000, Dist: 800, RR 1:", DoubleToString(g_risk_reward,1), ", SL min: 50pts)");
+         g_max_sl_price = 150.0; // [V15.35] Techo maximo de 150 pts en US30 para acotar SL institucional
+         PrintFormat("AURUM INDEX V15.35 ACTIVE (%s): US30 (Spread Max: %d, Dist: %d, BE: %d, SL [%.0f - %.0f] pts, R:R 1:%.1f)",
+                     EnumToString(_Period), g_max_spread, g_distancia_puntos, g_be_trigger, g_min_sl_price, g_max_sl_price, g_risk_reward);
       } else if(StringFind(symbol,"NAS100") >= 0 || StringFind(symbol,"USTEC") >= 0 || StringFind(symbol,"NDX") >= 0 || StringFind(symbol,"NQ") >= 0) {
          g_max_spread = 800; g_distancia_puntos = 600; g_be_trigger = 500;
          g_adx_threshold = 18; g_atr_multiplier = 2.0; g_risk_reward = InpRiskReward;
@@ -1925,7 +1927,7 @@ double GetManualAssetSLDist(string symbol, double &tp_ratio) {
    if(StringFind(sym, "BTC") >= 0 || StringFind(sym, "BITCOIN") >= 0) return 500.0;
    if(StringFind(sym, "ETH") >= 0 || StringFind(sym, "ETHEREUM") >= 0) return 40.0;
    // Indices
-   if(StringFind(sym, "US30") >= 0 || StringFind(sym, "WS30") >= 0) return 100.0;
+   if(StringFind(sym, "US30") >= 0 || StringFind(sym, "DJI") >= 0 || StringFind(sym, "DJ30") >= 0 || StringFind(sym, "WS30") >= 0 || StringFind(sym, "WALLSTREET") >= 0) return 100.0;
    if(StringFind(sym, "NAS100") >= 0 || StringFind(sym, "USTEC") >= 0) return 50.0;
    
    return 300 * pt;
@@ -2244,7 +2246,7 @@ int GetAdaptiveMaxSpread(int userMaxSpread) {
    if(StringFind(sym, "GOLD") >= 0 || StringFind(sym, "XAU") >= 0) { if(eff < 75) eff = 75; }
    else if(StringFind(sym, "BTC") >= 0) { if(eff < 6000) eff = 6000; }
    else if(StringFind(sym, "ETH") >= 0) { if(eff < 3000) eff = 3000; }
-   else if(StringFind(sym, "US30") >= 0 || StringFind(sym, "DJ") >= 0) { if(eff < 1200) eff = 1200; }
+   else if(StringFind(sym, "US30") >= 0 || StringFind(sym, "DJ") >= 0 || StringFind(sym, "WS30") >= 0 || StringFind(sym, "WALLSTREET") >= 0) { if(eff < 1200) eff = 1200; }
    else if(StringFind(sym, "NAS") >= 0 || StringFind(sym, "USTEC") >= 0) { if(eff < 900) eff = 900; }
    else if(StringFind(sym, "GER") >= 0 || StringFind(sym, "DAX") >= 0) { if(eff < 900) eff = 900; }
    return eff;

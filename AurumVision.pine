@@ -107,7 +107,8 @@ int adx_min        = inp_adx_min
 float atr_mult     = inp_atr_mult
 float min_sl_price = 0.0
 float max_sl_price = 0.0
-bool is_gold_asset = false
+bool is_gold_asset  = false
+bool is_index_asset = false
 
 if inp_auto_tune
     string sym = syminfo.ticker
@@ -134,6 +135,14 @@ if inp_auto_tune
         atr_mult     := 2.0
         min_sl_price := inp_gold_min_sl
         max_sl_price := inp_gold_max_sl
+    else if str.contains(sym, "US30") or str.contains(sym, "DJI") or str.contains(sym, "DJ30") or str.contains(sym, "WS30") or str.contains(sym, "WALLSTREET")
+        is_index_asset := true
+        rsi_os       := 42
+        rsi_ob       := 60
+        adx_min      := 18
+        atr_mult     := 2.0
+        min_sl_price := 50.0
+        max_sl_price := 150.0
 
 // ==================== DETECCIÓN DE HORARIO & KILLZONE (UTC) ====================
 cur_h = hour(time, "UTC")
@@ -842,7 +851,8 @@ if barstate.islast and inp_show_hud
 
     // Fila 13: Techo SL
     table.cell(dash, 0, 13, "Gestión de SL", text_color=c_white)
-    table.cell(dash, 1, 13, is_gold_asset ? "$10 - $18 USD Capped" : "2.0x ATR Dinámico", text_color=c_cyan)
+    string sl_mgmt_txt = is_gold_asset ? "$10 - $18 USD Capped" : is_index_asset ? "50 - 150 pts Capped" : "2.0x ATR Dinámico"
+    table.cell(dash, 1, 13, sl_mgmt_txt, text_color=c_cyan)
 
     // Fila 14: Tiempo en Mercado / Duración de Entrada
     table.cell(dash, 0, 14, "Tiempo en Mercado", text_color=c_white)
