@@ -1,3 +1,4 @@
+import React from "react"
 import { Metadata } from "next"
 import { DashboardView } from "@/components/dashboard/dashboard-view"
 

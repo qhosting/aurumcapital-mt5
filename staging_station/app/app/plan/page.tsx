@@ -1,3 +1,4 @@
+import React from "react"
 import { Metadata } from "next"
 import { TradingPlanSheet } from "@/components/academy/trading-plan-sheet"
 
